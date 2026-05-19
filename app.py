@@ -2,6 +2,7 @@ import streamlit as st
 from dotenv import load_dotenv
 from graph.orchestrator import graph
 from rag.ingestion import ingest_static_documents
+from tools.query_parser import parse_query
 
 load_dotenv()
 
@@ -25,20 +26,41 @@ def init_rag() -> None:
 
 init_rag()
 
-# ── Input form ──────────────────────────────────────────────────────────────
+# ── Input ───────────────────────────────────────────────────────────────────
+st.write("Describe the target in your own words, or fill in the fields directly.")
+
+raw_query = st.text_area(
+    "Free-form query",
+    placeholder=(
+        "e.g. 'Assess Genentech's antibody targeting PD-L1 for non-small cell lung cancer'\n"
+        "or 'Is TROP2 a good target for an ADC in triple-negative breast cancer? Company: Gilead'"
+    ),
+    height=90,
+    label_visibility="collapsed",
+)
+
+parsed: dict = {}
+if raw_query.strip():
+    with st.spinner("Parsing query..."):
+        parsed = parse_query(raw_query)
+
+    if parsed.get("confidence") == "low":
+        st.caption("Some fields couldn't be inferred — please review below.")
+
+# Editable fields pre-filled from parsed query (or blank for direct entry)
 with st.form("assessment_form"):
     col1, col2, col3 = st.columns(3)
     with col1:
-        target = st.text_input("Drug Target *", placeholder="e.g., PD-L1, IL-6R, VEGF")
+        target = st.text_input("Drug Target *", value=parsed.get("target", ""), placeholder="e.g., PD-L1")
     with col2:
-        company = st.text_input("Company *", placeholder="e.g., Genentech, BioNTech")
+        company = st.text_input("Company *", value=parsed.get("company", ""), placeholder="e.g., Genentech")
     with col3:
-        indication = st.text_input("Indication (optional)", placeholder="e.g., NSCLC, rheumatoid arthritis")
+        indication = st.text_input("Indication (optional)", value=parsed.get("indication", ""), placeholder="e.g., NSCLC")
 
     submitted = st.form_submit_button("Run Assessment", type="primary", use_container_width=True)
 
 if submitted and not (target and company):
-    st.warning("Please provide both a target name and a company name.")
+    st.warning("Target and Company are required. Edit the fields above or refine your query.")
     st.stop()
 
 # ── Run assessment ───────────────────────────────────────────────────────────
