@@ -1,6 +1,12 @@
 import anthropic
 from rag.vectorstore import query_knowledge_base
 from graph.state import TargetAssessmentState
+from config import (
+    SYNTHESIS_MODEL,
+    SYNTHESIS_MAX_TOKENS,
+    RAG_TOP_K,
+    SYNTHESIS_SYSTEM_PROMPT,
+)
 
 _client = anthropic.Anthropic()
 
@@ -64,11 +70,6 @@ REPORT_TOOL = {
     },
 }
 
-SYSTEM_PROMPT = """You are a senior drug discovery analyst with 20 years of experience in biologics and antibody therapeutics.
-Synthesize research findings to produce a rigorous, evidence-based assessment of a drug target.
-
-Be direct. Acknowledge uncertainty where it exists. Do not overstate confidence.
-Use the create_assessment_report tool to submit your structured assessment."""
 
 
 def synthesis_node(state: TargetAssessmentState) -> dict:
@@ -80,7 +81,7 @@ def synthesis_node(state: TargetAssessmentState) -> dict:
     # Pull relevant frameworks from the knowledge base
     rag_results = query_knowledge_base(
         f"large molecule drug target validation {target} druggability clinical",
-        n_results=4,
+        n_results=RAG_TOP_K,
     )
     rag_context = "\n\n".join(
         f"[{r['source']}]\n{r['content']}" for r in rag_results
@@ -108,9 +109,9 @@ def synthesis_node(state: TargetAssessmentState) -> dict:
 Now create the structured assessment report."""
 
     response = _client.messages.create(
-        model="claude-sonnet-4-6",
-        max_tokens=4096,
-        system=SYSTEM_PROMPT,
+        model=SYNTHESIS_MODEL,
+        max_tokens=SYNTHESIS_MAX_TOKENS,
+        system=SYNTHESIS_SYSTEM_PROMPT,
         tools=[REPORT_TOOL],
         tool_choice={"type": "tool", "name": "create_assessment_report"},
         messages=[{"role": "user", "content": user_message}],

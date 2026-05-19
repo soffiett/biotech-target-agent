@@ -3,6 +3,12 @@ import anthropic
 from tools.clinicaltrials import search_clinical_trials
 from tools.web_search import search_web
 from graph.state import TargetAssessmentState
+from config import (
+    SEARCH_MODEL,
+    SEARCH_MAX_TOKENS,
+    MAX_TOOL_ITERATIONS,
+    CLINICAL_TRIALS_SYSTEM_PROMPT,
+)
 
 _client = anthropic.Anthropic()
 
@@ -42,17 +48,6 @@ TOOLS = [
     },
 ]
 
-SYSTEM_PROMPT = """You are a clinical development expert and biotech analyst.
-Your task: map the clinical landscape for a drug target to assess precedent and competitive risk.
-
-Perform 3–5 searches covering:
-1. Direct trials — is this exact target already in clinical trials? What phase and status?
-2. Approved drugs — are there already approved biologics for this target? (validates biology, raises competitive bar)
-3. Related targets — if no direct trials, what other targets in the same pathway are in the clinic?
-4. Recent failures — have any programs targeting this mechanism failed? If so, why?
-5. Competitive landscape — who else is in the clinic for this target?
-
-Summarize findings with: trial phase, status, sponsor, indication, and what it means for the target's clinical viability."""
 
 
 def _run_tool(name: str, inputs: dict) -> str:
@@ -86,11 +81,11 @@ def clinical_trials_node(state: TargetAssessmentState) -> dict:
 
     findings, errors = [], []
 
-    for _ in range(8):
+    for _ in range(MAX_TOOL_ITERATIONS):
         response = _client.messages.create(
-            model="claude-haiku-4-5",
-            max_tokens=2048,
-            system=SYSTEM_PROMPT,
+            model=SEARCH_MODEL,
+            max_tokens=SEARCH_MAX_TOKENS,
+            system=CLINICAL_TRIALS_SYSTEM_PROMPT,
             tools=TOOLS,
             messages=messages,
         )

@@ -3,6 +3,12 @@ import anthropic
 from tools.pubmed import search_pubmed
 from tools.web_search import search_web
 from graph.state import TargetAssessmentState
+from config import (
+    SEARCH_MODEL,
+    SEARCH_MAX_TOKENS,
+    MAX_TOOL_ITERATIONS,
+    BIOLOGY_SYSTEM_PROMPT,
+)
 
 _client = anthropic.Anthropic()
 
@@ -42,18 +48,6 @@ TOOLS = [
     },
 ]
 
-SYSTEM_PROMPT = """You are a computational biologist and drug discovery scientist specializing in biologics.
-Your task: research a drug target to assess the biological rationale for a large molecule therapeutic.
-
-Cover these areas using 4–6 targeted searches:
-1. Disease biology — what role does this target play in the disease mechanism?
-2. Genetic / human evidence — GWAS hits, LOF variants, Mendelian randomization studies?
-3. Preclinical validation — animal models, in vitro studies, patient tissue data?
-4. Target expression — is it expressed in disease tissue but limited in normal tissue?
-5. Company approach — what is the company's specific biological hypothesis?
-6. Safety signals — any known on-target toxicity concerns?
-
-After your searches, write a structured summary covering each area. Be concise and evidence-based."""
 
 
 def _run_tool(name: str, inputs: dict) -> str:
@@ -86,11 +80,11 @@ def biology_node(state: TargetAssessmentState) -> dict:
 
     findings, errors = [], []
 
-    for _ in range(8):  # max tool-call iterations
+    for _ in range(MAX_TOOL_ITERATIONS):
         response = _client.messages.create(
-            model="claude-haiku-4-5",
-            max_tokens=2048,
-            system=SYSTEM_PROMPT,
+            model=SEARCH_MODEL,
+            max_tokens=SEARCH_MAX_TOKENS,
+            system=BIOLOGY_SYSTEM_PROMPT,
             tools=TOOLS,
             messages=messages,
         )
