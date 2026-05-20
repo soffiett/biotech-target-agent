@@ -1,8 +1,9 @@
 import requests
+from logger import get_logger
 
+log = get_logger(__name__)
 OT_GRAPHQL = "https://api.platform.opentargets.org/api/v4/graphql"
 
-# Step 1 — find the Ensembl ID from a gene symbol or name
 _SEARCH_QUERY = """
 query Search($q: String!) {
   search(queryString: $q, entityNames: ["target"]) {
@@ -11,8 +12,6 @@ query Search($q: String!) {
 }
 """
 
-# Step 2 — get full target profile using the Ensembl ID
-# Only uses stable, confirmed fields from the OpenTargets Platform v4 schema
 _TARGET_QUERY = """
 query Target($ensemblId: String!) {
   target(ensemblId: $ensemblId) {
@@ -25,16 +24,15 @@ query Target($ensemblId: String!) {
       rows {
         disease { name }
         score
-        datatypeScores { componentId score }
+        datatypeScores { id score }
       }
     }
-    knownDrugs(size: 10) {
+    drugAndClinicalCandidates {
+      count
       rows {
-        drug { name maximumClinicalTrialPhase }
-        disease { name }
-        phase
-        status
-        mechanismOfAction
+        maxClinicalStage
+        drug { name maximumClinicalStage }
+        diseases { diseaseFromSource }
       }
     }
   }
@@ -48,6 +46,8 @@ def _graphql(query: str, variables: dict) -> dict:
         json={"query": query, "variables": variables},
         timeout=15,
     )
+    if not resp.ok:
+        log.error(f"OpenTargets API error {resp.status_code}: {resp.text[:300]}")
     resp.raise_for_status()
     return resp.json().get("data", {})
 
@@ -55,11 +55,10 @@ def _graphql(query: str, variables: dict) -> dict:
 def get_opentargets_data(target_symbol: str) -> dict:
     """
     Look up a target on OpenTargets Platform.
-    Returns a structured dict with disease associations, known drugs, and safety flags.
-    Returns {"error": ...} if the target is not found.
+    Returns disease associations and known clinical candidates.
     """
     try:
-        # Search for Ensembl ID
+        log.debug(f"OpenTargets search for: {target_symbol}")
         search_data = _graphql(_SEARCH_QUERY, {"q": target_symbol})
         hits = search_data.get("search", {}).get("hits", [])
         target_hits = [h for h in hits if h.get("entity") == "target"]
@@ -68,40 +67,41 @@ def get_opentargets_data(target_symbol: str) -> dict:
             return {"error": f"Target '{target_symbol}' not found in OpenTargets."}
 
         ensembl_id = target_hits[0]["id"]
+        log.debug(f"OpenTargets found Ensembl ID: {ensembl_id}")
 
-        # Fetch full profile
         target_data = _graphql(_TARGET_QUERY, {"ensemblId": ensembl_id})
         t = target_data.get("target")
         if not t:
             return {"error": f"No profile found for Ensembl ID {ensembl_id}."}
 
-        # Parse disease associations with datatype scores
+        # Disease associations
         diseases = []
         for row in t.get("associatedDiseases", {}).get("rows", []):
-            scores = {s["componentId"]: round(s["score"], 3) for s in row.get("datatypeScores", [])}
+            scores = {s["id"]: round(s["score"], 3) for s in row.get("datatypeScores", [])}
             diseases.append({
                 "disease": row["disease"]["name"],
                 "overall_score": round(row["score"], 3),
                 "genetic_association": scores.get("genetic_association", 0),
                 "somatic_mutation": scores.get("somatic_mutation", 0),
-                "known_drug": scores.get("known_drug", 0),
-                "affected_pathway": scores.get("affected_pathway", 0),
+                "clinical": scores.get("clinical", 0),
                 "literature": scores.get("literature", 0),
             })
 
-        # Parse known drugs — infer approval from maximumClinicalTrialPhase == 4
+        # Clinical candidates and approved drugs
         drugs = []
-        for row in t.get("knownDrugs", {}).get("rows", []):
+        for row in t.get("drugAndClinicalCandidates", {}).get("rows", []):
             drug = row.get("drug", {})
-            max_phase = drug.get("maximumClinicalTrialPhase")
+            stage = row.get("maxClinicalStage", "")
+            indications = list({
+                d.get("diseaseFromSource", "")
+                for d in row.get("diseases", [])
+                if d.get("diseaseFromSource")
+            })[:3]
             drugs.append({
                 "name": drug.get("name", ""),
-                "max_phase": max_phase,
-                "is_approved": max_phase == 4,
-                "indication": row.get("disease", {}).get("name", ""),
-                "phase": row.get("phase"),
-                "status": row.get("status", ""),
-                "mechanism": row.get("mechanismOfAction", ""),
+                "max_stage": stage,
+                "is_approved": stage == "APPROVAL",
+                "indications": indications,
             })
 
         return {
@@ -109,13 +109,13 @@ def get_opentargets_data(target_symbol: str) -> dict:
             "symbol": t.get("approvedSymbol", ""),
             "name": t.get("approvedName", ""),
             "biotype": t.get("biotype", ""),
-            "function": " ".join(t.get("functionDescriptions", []))[:800],
+            "function": " ".join(t.get("functionDescriptions", []))[:600],
             "top_diseases": diseases,
             "known_drugs": drugs,
-            "safety_liabilities": [],  # removed — field schema changed in OT v4
         }
 
     except Exception as e:
+        log.error(f"OpenTargets lookup failed for '{target_symbol}': {e}", exc_info=True)
         return {"error": str(e)}
 
 
@@ -125,7 +125,7 @@ def format_for_context(data: dict) -> str:
         return f"OpenTargets: {data['error']}"
 
     lines = [
-        f"## OpenTargets Profile: {data['symbol']} ({data['name']})",
+        f"## OpenTargets: {data['symbol']} ({data['name']})",
         f"Biotype: {data['biotype']}",
         f"Function: {data['function']}",
         "",
@@ -135,23 +135,16 @@ def format_for_context(data: dict) -> str:
         lines.append(
             f"- {d['disease']}: overall={d['overall_score']} "
             f"| genetic={d['genetic_association']} "
-            f"| clinical={d['known_drug']}"
+            f"| clinical={d['clinical']}"
         )
 
-    lines += ["", "### Known Drugs / Clinical Programs"]
+    lines += ["", "### Clinical Candidates & Approved Drugs"]
     if data["known_drugs"]:
         for dr in data["known_drugs"][:8]:
-            status = "APPROVED" if dr["is_approved"] else f"Phase {dr['max_phase']}"
-            lines.append(f"- {dr['name']} ({status}) — {dr['indication']} — {dr['mechanism']}")
+            status = "APPROVED" if dr["is_approved"] else dr["max_stage"]
+            indications = ", ".join(dr["indications"]) or "unknown indication"
+            lines.append(f"- {dr['name']} ({status}) — {indications}")
     else:
-        lines.append("- No known drugs found.")
-
-    lines += ["", "### Safety Liabilities"]
-    if data["safety_liabilities"]:
-        for s in data["safety_liabilities"][:5]:
-            effects = ", ".join(s["effects"]) if s["effects"] else "unspecified"
-            lines.append(f"- {s['event']}: {effects}")
-    else:
-        lines.append("- No safety liabilities flagged.")
+        lines.append("- No clinical candidates found.")
 
     return "\n".join(lines)
