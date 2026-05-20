@@ -33,11 +33,12 @@ def prefetch_node(state: TargetAssessmentState) -> dict:
     else:
         log.info(f"[{target}] UniProt OK — {up_data.get('protein_name', 'unknown protein')}")
 
-    # Format into a single readable context block injected into both agents
+    # Format into a readable context block injected into both agents
+    # Cap at 1500 chars to avoid contributing to token burst from parallel agents
     combined = "\n\n".join([
         ot_format(ot_data),
         up_format(up_data),
-    ])
+    ])[:1500]
 
     return {
         "prefetch_context": {

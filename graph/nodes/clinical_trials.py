@@ -1,4 +1,5 @@
 import json
+import time
 import anthropic
 from tools.clinicaltrials import search_clinical_trials
 from tools.web_search import search_web
@@ -89,13 +90,24 @@ def clinical_trials_node(state: TargetAssessmentState) -> dict:
     log.info(f"[{target}/{company}] Clinical trials agent started")
 
     for _ in range(MAX_TOOL_ITERATIONS):
-        response = _client.messages.create(
-            model=SEARCH_MODEL,
-            max_tokens=SEARCH_MAX_TOKENS,
-            system=CLINICAL_TRIALS_SYSTEM_PROMPT,
-            tools=TOOLS,
-            messages=messages,
-        )
+        # Retry up to 3 times on rate limit with exponential backoff
+        for attempt in range(3):
+            try:
+                response = _client.messages.create(
+                    model=SEARCH_MODEL,
+                    max_tokens=SEARCH_MAX_TOKENS,
+                    system=CLINICAL_TRIALS_SYSTEM_PROMPT,
+                    tools=TOOLS,
+                    messages=messages,
+                )
+                break
+            except anthropic.RateLimitError:
+                wait = 30 * (attempt + 1)
+                log.warning(f"[{target}/{company}] Rate limit hit (attempt {attempt+1}), waiting {wait}s...")
+                time.sleep(wait)
+        else:
+            errors.append("Clinical trials agent hit rate limit after 3 retries.")
+            break
 
         messages.append({"role": "assistant", "content": response.content})
 
