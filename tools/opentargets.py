@@ -12,6 +12,7 @@ query Search($q: String!) {
 """
 
 # Step 2 — get full target profile using the Ensembl ID
+# Only uses stable, confirmed fields from the OpenTargets Platform v4 schema
 _TARGET_QUERY = """
 query Target($ensemblId: String!) {
   target(ensemblId: $ensemblId) {
@@ -29,16 +30,12 @@ query Target($ensemblId: String!) {
     }
     knownDrugs(size: 10) {
       rows {
-        drug { name maximumClinicalTrialPhase isApproved }
+        drug { name maximumClinicalTrialPhase }
         disease { name }
         phase
         status
         mechanismOfAction
       }
-    }
-    safetyLiabilities {
-      event
-      effects { direction dosing }
     }
   }
 }
@@ -92,28 +89,20 @@ def get_opentargets_data(target_symbol: str) -> dict:
                 "literature": scores.get("literature", 0),
             })
 
-        # Parse known drugs
+        # Parse known drugs — infer approval from maximumClinicalTrialPhase == 4
         drugs = []
         for row in t.get("knownDrugs", {}).get("rows", []):
             drug = row.get("drug", {})
+            max_phase = drug.get("maximumClinicalTrialPhase")
             drugs.append({
                 "name": drug.get("name", ""),
-                "max_phase": drug.get("maximumClinicalTrialPhase"),
-                "is_approved": drug.get("isApproved", False),
+                "max_phase": max_phase,
+                "is_approved": max_phase == 4,
                 "indication": row.get("disease", {}).get("name", ""),
                 "phase": row.get("phase"),
                 "status": row.get("status", ""),
                 "mechanism": row.get("mechanismOfAction", ""),
             })
-
-        # Parse safety flags
-        safety = [
-            {
-                "event": s.get("event", ""),
-                "effects": [f"{e.get('direction', '')} {e.get('dosing', '')}".strip() for e in s.get("effects", [])],
-            }
-            for s in t.get("safetyLiabilities", [])
-        ]
 
         return {
             "ensembl_id": ensembl_id,
@@ -123,7 +112,7 @@ def get_opentargets_data(target_symbol: str) -> dict:
             "function": " ".join(t.get("functionDescriptions", []))[:800],
             "top_diseases": diseases,
             "known_drugs": drugs,
-            "safety_liabilities": safety,
+            "safety_liabilities": [],  # removed — field schema changed in OT v4
         }
 
     except Exception as e:
