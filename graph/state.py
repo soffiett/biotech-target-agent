@@ -18,3 +18,4 @@ class TargetAssessmentState(TypedDict):
 
     # Final output
     report: Optional[dict]
+    quality_assessment: Optional[dict]

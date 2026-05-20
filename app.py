@@ -80,12 +80,14 @@ if submitted and target and company:
             "trial_findings": [],
             "errors": [],
             "report": None,
+            "quality_assessment": None,
         })
 
         status.update(label="Assessment complete", state="complete")
 
     report = result.get("report", {})
     errors = result.get("errors", [])
+    quality = result.get("quality_assessment", {})
 
     if not report:
         st.error("No report was generated. Check your API keys and try again.")
@@ -105,6 +107,27 @@ if submitted and target and company:
     col3.metric("Indication", indication or "General")
 
     st.info(report.get("recommendation_summary", ""))
+
+    # ── Report quality panel ─────────────────────────────────────────────────
+    if quality and "error" not in quality:
+        overall_q = quality.get("overall_quality", 0)
+        q_color = "green" if overall_q >= 4 else "orange" if overall_q >= 3 else "red"
+        q_label = {5: "Excellent", 4: "Good", 3: "Adequate", 2: "Weak", 1: "Poor"}.get(overall_q, "")
+
+        with st.expander(f"Report Quality: {overall_q}/5 — {q_label}", expanded=False):
+            qcol1, qcol2 = st.columns(2)
+            qcol1.metric("Strongest section", quality.get("strongest_section", "—"))
+            qcol2.metric("Weakest section", quality.get("weakest_section", "—"))
+
+            st.caption("Top improvement:")
+            st.warning(quality.get("top_improvement", ""))
+
+            st.caption("Section scores:")
+            for s in quality.get("section_scores", []):
+                score_bar = "█" * s["score"] + "░" * (5 - s["score"])
+                st.markdown(f"**{s['section']}** `{score_bar}` {s['score']}/5 — {s['reasoning']}")
+                for issue in s.get("issues", []):
+                    st.caption(f"  ⚠ {issue}")
 
     # ── Detailed sections ────────────────────────────────────────────────────
     with st.expander("Biology Rationale", expanded=True):

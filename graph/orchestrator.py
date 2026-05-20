@@ -4,6 +4,7 @@ from graph.nodes.prefetch import prefetch_node
 from graph.nodes.biology import biology_node
 from graph.nodes.clinical_trials import clinical_trials_node
 from graph.nodes.synthesis import synthesis_node
+from graph.nodes.judge import judge_node
 
 
 def build_graph() -> StateGraph:
@@ -13,6 +14,7 @@ def build_graph() -> StateGraph:
     workflow.add_node("biology", biology_node)
     workflow.add_node("clinical_trials", clinical_trials_node)
     workflow.add_node("synthesis", synthesis_node)
+    workflow.add_node("judge", judge_node)
 
     # Prefetch runs first — sets OpenTargets + UniProt context
     workflow.add_edge(START, "prefetch")
@@ -25,7 +27,9 @@ def build_graph() -> StateGraph:
     workflow.add_edge("biology", "synthesis")
     workflow.add_edge("clinical_trials", "synthesis")
 
-    workflow.add_edge("synthesis", END)
+    # Judge scores the report before it reaches the user
+    workflow.add_edge("synthesis", "judge")
+    workflow.add_edge("judge", END)
 
     return workflow.compile()
 
