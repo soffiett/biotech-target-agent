@@ -17,6 +17,11 @@ MAX_TOOL_ITERATIONS = 8
 # ── RAG ───────────────────────────────────────────────────────────────────────
 RAG_TOP_K = 4  # number of chunks retrieved for synthesis context
 
+# ── Evaluation ────────────────────────────────────────────────────────────────
+EVAL_JUDGE_MODEL = "claude-sonnet-4-6"  # stronger model for reliable judging
+EVAL_JUDGE_MAX_TOKENS = 2048
+CONSISTENCY_RUNS = 2                    # how many times to run agent for consistency check
+
 # ── System prompts ────────────────────────────────────────────────────────────
 
 BIOLOGY_SYSTEM_PROMPT = """You are a computational biologist and drug discovery scientist specializing in biologics.

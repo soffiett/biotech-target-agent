@@ -1,10 +1,12 @@
 import streamlit as st
 from dotenv import load_dotenv
+
+# Must load env vars before importing any module that creates an Anthropic client
+load_dotenv()
+
 from graph.orchestrator import graph
 from rag.ingestion import ingest_static_documents
 from tools.query_parser import parse_query
-
-load_dotenv()
 
 st.set_page_config(
     page_title="Biotech Target Assessor",
@@ -73,6 +75,7 @@ if submitted and target and company:
             "target": target,
             "company": company,
             "indication": indication or "not specified",
+            "prefetch_context": {},
             "bio_findings": [],
             "trial_findings": [],
             "errors": [],

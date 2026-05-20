@@ -2,6 +2,7 @@ import json
 import anthropic
 from tools.pubmed import search_pubmed
 from tools.web_search import search_web
+from tools.biorxiv import search_biorxiv
 from graph.state import TargetAssessmentState
 from config import (
     SEARCH_MODEL,
@@ -32,6 +33,21 @@ TOOLS = [
         },
     },
     {
+        "name": "search_biorxiv",
+        "description": (
+            "Search bioRxiv and medRxiv preprints. Use for cutting-edge findings not yet "
+            "peer-reviewed — especially useful for fast-moving targets in immunology or oncology."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string"},
+                "max_results": {"type": "integer", "default": 5},
+            },
+            "required": ["query"],
+        },
+    },
+    {
         "name": "search_web",
         "description": (
             "Search the web for company pipeline info, press releases, investor presentations, "
@@ -49,11 +65,12 @@ TOOLS = [
 ]
 
 
-
 def _run_tool(name: str, inputs: dict) -> str:
     try:
         if name == "search_pubmed":
             return json.dumps(search_pubmed(inputs["query"], inputs.get("max_results", 5)))
+        if name == "search_biorxiv":
+            return json.dumps(search_biorxiv(inputs["query"], inputs.get("max_results", 5)))
         if name == "search_web":
             return json.dumps(search_web(inputs["query"], inputs.get("max_results", 5)))
     except Exception as e:
@@ -65,6 +82,7 @@ def biology_node(state: TargetAssessmentState) -> dict:
     target = state["target"]
     company = state["company"]
     indication = state.get("indication", "not specified")
+    prefetch_summary = state.get("prefetch_context", {}).get("combined_summary", "")
 
     messages = [
         {
@@ -73,7 +91,9 @@ def biology_node(state: TargetAssessmentState) -> dict:
                 f"Assess the biological rationale for targeting **{target}** as a large molecule therapeutic.\n"
                 f"Company: {company}\n"
                 f"Indication: {indication}\n\n"
-                f"Search PubMed and the web, then provide your structured findings."
+                f"## Pre-fetched Evidence Baseline\n{prefetch_summary}\n\n"
+                "Use the baseline above to guide your searches — focus on gaps and go deeper "
+                "on signals that need further investigation. Search PubMed, bioRxiv, and the web."
             ),
         }
     ]

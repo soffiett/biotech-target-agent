@@ -8,6 +8,9 @@ class TargetAssessmentState(TypedDict):
     company: str
     indication: str
 
+    # Pre-fetched structured data (OpenTargets + UniProt) — set before parallel nodes
+    prefetch_context: dict
+
     # Parallel node outputs — operator.add merges lists from concurrent nodes
     bio_findings: Annotated[list[dict], operator.add]
     trial_findings: Annotated[list[dict], operator.add]

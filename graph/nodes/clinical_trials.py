@@ -66,6 +66,8 @@ def clinical_trials_node(state: TargetAssessmentState) -> dict:
     company = state["company"]
     indication = state.get("indication", "not specified")
 
+    prefetch_summary = state.get("prefetch_context", {}).get("combined_summary", "")
+
     messages = [
         {
             "role": "user",
@@ -73,8 +75,9 @@ def clinical_trials_node(state: TargetAssessmentState) -> dict:
                 f"Map the clinical landscape for **{target}** as a large molecule target.\n"
                 f"Company developing it: {company}\n"
                 f"Indication: {indication}\n\n"
-                "Search ClinicalTrials.gov and the web, then summarize the clinical precedent, "
-                "current trials, and competitive risk."
+                f"## Pre-fetched Evidence Baseline\n{prefetch_summary}\n\n"
+                "The known drugs above are a starting point — search ClinicalTrials.gov to get "
+                "current phase, status, and any recent updates. Investigate failures and gaps."
             ),
         }
     ]
