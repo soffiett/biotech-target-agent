@@ -19,7 +19,7 @@ RAG_TOP_K = 4  # number of chunks retrieved for synthesis context
 
 # ── Evaluation ────────────────────────────────────────────────────────────────
 EVAL_JUDGE_MODEL = "claude-sonnet-4-6"  # stronger model for reliable judging
-EVAL_JUDGE_MAX_TOKENS = 2048
+EVAL_JUDGE_MAX_TOKENS = 4096            # needs room to score all 6 sections with reasoning
 CONSISTENCY_RUNS = 2                    # how many times to run agent for consistency check
 
 # ── System prompts ────────────────────────────────────────────────────────────

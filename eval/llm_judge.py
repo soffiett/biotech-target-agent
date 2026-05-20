@@ -8,6 +8,9 @@ and run standalone for novel targets with no ground truth.
 
 import anthropic
 from config import EVAL_JUDGE_MODEL, EVAL_JUDGE_MAX_TOKENS
+from logger import get_logger
+
+log = get_logger(__name__)
 
 _client = anthropic.Anthropic()
 
@@ -140,7 +143,14 @@ def judge_report(report: dict, target: str, company: str) -> dict:
     for block in response.content:
         if block.type == "tool_use" and block.name == "submit_section_scores":
             scores = block.input
+            log.debug(f"Judge raw response keys: {list(scores.keys())}")
+            log.debug(f"Judge stop_reason: {response.stop_reason}")
+
             section_scores = scores.get("section_scores", [])
+
+            if not section_scores:
+                log.warning("Judge returned empty section_scores — likely token limit reached")
+
             avg = (
                 sum(s.get("score", 0) for s in section_scores) / len(section_scores)
                 if section_scores else 0.0
@@ -156,4 +166,5 @@ def judge_report(report: dict, target: str, company: str) -> dict:
                 "top_improvement": scores.get("top_improvement", ""),
             }
 
+    log.error(f"Judge returned no tool_use block. stop_reason={response.stop_reason}")
     return {"error": "Judge failed to return structured scores."}
