@@ -140,16 +140,20 @@ def judge_report(report: dict, target: str, company: str) -> dict:
     for block in response.content:
         if block.type == "tool_use" and block.name == "submit_section_scores":
             scores = block.input
-            avg = sum(s["score"] for s in scores["section_scores"]) / len(scores["section_scores"])
+            section_scores = scores.get("section_scores", [])
+            avg = (
+                sum(s.get("score", 0) for s in section_scores) / len(section_scores)
+                if section_scores else 0.0
+            )
             return {
                 "target": target,
                 "company": company,
-                "section_scores": scores["section_scores"],
-                "overall_quality": scores["overall_quality"],
+                "section_scores": section_scores,
+                "overall_quality": scores.get("overall_quality", 0),
                 "avg_section_score": round(avg, 2),
-                "strongest_section": scores["strongest_section"],
-                "weakest_section": scores["weakest_section"],
-                "top_improvement": scores["top_improvement"],
+                "strongest_section": scores.get("strongest_section", "unknown"),
+                "weakest_section": scores.get("weakest_section", "unknown"),
+                "top_improvement": scores.get("top_improvement", ""),
             }
 
     return {"error": "Judge failed to return structured scores."}
