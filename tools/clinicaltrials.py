@@ -1,5 +1,7 @@
 import requests
+from logger import get_logger
 
+log = get_logger(__name__)
 CT_BASE = "https://clinicaltrials.gov/api/v2/studies"
 
 FIELDS = ",".join([
@@ -18,6 +20,7 @@ FIELDS = ",".join([
 
 def search_clinical_trials(query: str, max_results: int = 10) -> list[dict]:
     """Search ClinicalTrials.gov v2 API for studies related to a target or drug."""
+    log.debug(f"ClinicalTrials search: '{query}' (max={max_results})")
     resp = requests.get(
         CT_BASE,
         params={
@@ -30,6 +33,7 @@ def search_clinical_trials(query: str, max_results: int = 10) -> list[dict]:
     )
     resp.raise_for_status()
     data = resp.json()
+    log.debug(f"ClinicalTrials returned {len(data.get('studies', []))} studies for '{query}'")
 
     studies = []
     for study in data.get("studies", []):

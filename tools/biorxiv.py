@@ -1,6 +1,7 @@
 import requests
+from logger import get_logger
 
-# Europe PMC indexes bioRxiv and medRxiv preprints with a proper search API
+log = get_logger(__name__)
 EPMC_SEARCH = "https://www.ebi.ac.uk/europepmc/webservices/rest/search"
 
 
@@ -9,6 +10,7 @@ def search_biorxiv(query: str, max_results: int = 5) -> list[dict]:
     Search bioRxiv and medRxiv preprints via Europe PMC.
     Returns recent preprints not yet in PubMed — critical for fast-moving fields.
     """
+    log.debug(f"bioRxiv search: '{query}' (max={max_results})")
     try:
         resp = requests.get(
             EPMC_SEARCH,
@@ -39,4 +41,5 @@ def search_biorxiv(query: str, max_results: int = 5) -> list[dict]:
         ]
 
     except Exception as e:
+        log.error(f"bioRxiv search failed for '{query}': {e}", exc_info=True)
         return [{"error": str(e)}]

@@ -7,6 +7,9 @@ from config import (
     RAG_TOP_K,
     SYNTHESIS_SYSTEM_PROMPT,
 )
+from logger import get_logger
+
+log = get_logger(__name__)
 
 _client = anthropic.Anthropic()
 
@@ -122,5 +125,11 @@ Now create the structured assessment report."""
         if block.type == "tool_use" and block.name == "create_assessment_report":
             report = block.input
             break
+
+    if report:
+        log.info(f"[{target}/{company}] Synthesis done — recommendation={report.get('recommendation')} "
+                 f"confidence={report.get('confidence_score')}")
+    else:
+        log.error(f"[{target}/{company}] Synthesis failed — no report returned")
 
     return {"report": report}

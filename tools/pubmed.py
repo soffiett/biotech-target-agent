@@ -2,7 +2,9 @@ import os
 import time
 import requests
 import xml.etree.ElementTree as ET
+from logger import get_logger
 
+log = get_logger(__name__)
 PUBMED_BASE = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils"
 
 
@@ -10,6 +12,7 @@ def search_pubmed(query: str, max_results: int = 5) -> list[dict]:
     """Search PubMed and return paper summaries with abstracts."""
     email = os.getenv("NCBI_EMAIL", "biotech-agent@example.com")
 
+    log.debug(f"PubMed search: '{query}' (max={max_results})")
     search_resp = requests.get(
         f"{PUBMED_BASE}/esearch.fcgi",
         params={
@@ -26,7 +29,9 @@ def search_pubmed(query: str, max_results: int = 5) -> list[dict]:
     ids = search_resp.json().get("esearchresult", {}).get("idlist", [])
 
     if not ids:
+        log.warning(f"PubMed returned 0 results for query: '{query}'")
         return []
+    log.debug(f"PubMed found {len(ids)} results for '{query}'")
 
     time.sleep(0.4)  # NCBI rate limit: max 3 requests/sec without API key
 

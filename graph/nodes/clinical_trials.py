@@ -3,6 +3,7 @@ import anthropic
 from tools.clinicaltrials import search_clinical_trials
 from tools.web_search import search_web
 from graph.state import TargetAssessmentState
+from logger import get_logger
 from config import (
     SEARCH_MODEL,
     SEARCH_MAX_TOKENS,
@@ -83,6 +84,9 @@ def clinical_trials_node(state: TargetAssessmentState) -> dict:
     ]
 
     findings, errors = [], []
+    tool_call_count = 0
+    log = get_logger(__name__)
+    log.info(f"[{target}/{company}] Clinical trials agent started")
 
     for _ in range(MAX_TOOL_ITERATIONS):
         response = _client.messages.create(
@@ -99,12 +103,15 @@ def clinical_trials_node(state: TargetAssessmentState) -> dict:
             for block in response.content:
                 if hasattr(block, "text") and block.text.strip():
                     findings.append({"type": "trial_summary", "content": block.text, "source": "clinical_trials_agent"})
+            log.info(f"[{target}/{company}] Trial agent done — {tool_call_count} tool calls, {len(findings)} findings")
             break
 
         if response.stop_reason == "tool_use":
             tool_results = []
             for block in response.content:
                 if block.type == "tool_use":
+                    tool_call_count += 1
+                    log.debug(f"[{target}/{company}] Trial tool call: {block.name}({block.input.get('query', '')})")
                     result = _run_tool(block.name, block.input)
                     tool_results.append({"type": "tool_result", "tool_use_id": block.id, "content": result})
             messages.append({"role": "user", "content": tool_results})

@@ -10,6 +10,9 @@ from config import (
     MAX_TOOL_ITERATIONS,
     BIOLOGY_SYSTEM_PROMPT,
 )
+from logger import get_logger
+
+log = get_logger(__name__)
 
 _client = anthropic.Anthropic()
 
@@ -99,8 +102,11 @@ def biology_node(state: TargetAssessmentState) -> dict:
     ]
 
     findings, errors = [], []
+    tool_call_count = 0
 
-    for _ in range(MAX_TOOL_ITERATIONS):
+    log.info(f"[{target}/{company}] Biology agent started")
+
+    for iteration in range(MAX_TOOL_ITERATIONS):
         response = _client.messages.create(
             model=SEARCH_MODEL,
             max_tokens=SEARCH_MAX_TOKENS,
@@ -115,12 +121,15 @@ def biology_node(state: TargetAssessmentState) -> dict:
             for block in response.content:
                 if hasattr(block, "text") and block.text.strip():
                     findings.append({"type": "biology_summary", "content": block.text, "source": "biology_agent"})
+            log.info(f"[{target}/{company}] Biology agent done — {tool_call_count} tool calls, {len(findings)} findings")
             break
 
         if response.stop_reason == "tool_use":
             tool_results = []
             for block in response.content:
                 if block.type == "tool_use":
+                    tool_call_count += 1
+                    log.debug(f"[{target}/{company}] Biology tool call: {block.name}({block.input.get('query', '')})")
                     result = _run_tool(block.name, block.input)
                     tool_results.append({"type": "tool_result", "tool_use_id": block.id, "content": result})
             messages.append({"role": "user", "content": tool_results})
