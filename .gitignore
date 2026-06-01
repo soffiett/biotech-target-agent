@@ -11,3 +11,4 @@ dist/
 build/
 .pytest_cache/
 logs/
+workflow_diagram.png
