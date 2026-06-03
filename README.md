@@ -4,7 +4,7 @@ A multi-agent system that evaluates whether a biotech company's drug target is l
 
 Built with LangGraph, Claude Haiku + Sonnet, and free public APIs (OpenTargets, PubMed, ClinicalTrials.gov, bioRxiv). Designed for accuracy on a personal budget.
 
-**Live demo:** Deployed on AWS ECS Fargate (ARM64 Graviton2) — http://18.145.238.250:8501
+**Deployed on AWS ECS Fargate** (ARM64 Graviton2) with ECR, Secrets Manager, and CloudWatch logging.
 
 ---
 
