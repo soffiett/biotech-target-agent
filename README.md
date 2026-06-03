@@ -14,7 +14,7 @@ Built with LangGraph, Claude Haiku + Sonnet, and free public APIs (OpenTargets, 
 flowchart TD
     UI["🖥️ Streamlit UI\nFree-form text or structured fields"]
     QP["🔍 Query Parser\nHaiku 4.5 · Extracts target / company / indication"]
-    PF["📡 Prefetch Node\nOpenTargets · Disease scores · Clinical candidates"]
+    PF["📡 Prefetch Node\nOpenTargets · Disease scores · Known drugs · Clinical candidates"]
 
     BIO["🧬 Biology Agent\nHaiku 4.5"]
     CT["💊 Clinical Trial Agent\nHaiku 4.5"]
@@ -54,40 +54,12 @@ flowchart TD
     style OUT fill:#2E7D32,color:#fff
 ```
 
-```
-User Input — free-form text or structured fields
-              │
-        [Query Parser]        Haiku extracts target / company / indication
-              │
-     [LangGraph Orchestrator]
-              │
-          [Prefetch]          OpenTargets + UniProt (deterministic baseline)
-              │ parallel fan-out
-    ┌─────────┴──────────┐
-    ▼                    ▼
-[Biology Agent]   [Clinical Trial Agent]
-  Haiku 4.5          Haiku 4.5
-  · PubMed           · ClinicalTrials.gov v2
-  · bioRxiv          · Tavily web search
-  · Tavily web
-    └─────────┬──────────┘
-              ▼
-      [Synthesis Agent]
-         Sonnet 4.6
-         · ChromaDB RAG
-         · Structured report
-              ▼
-         [Judge Node]         Sonnet scores report quality (1–5 per section)
-              │
-        Assessment Report + Quality Panel → User
-```
-
 ### Node responsibilities
 
 | Node | Model | Role |
 |------|-------|------|
 | **Query Parser** | Haiku 4.5 | Extracts target / company / indication from free-form text |
-| **Prefetch** | — (API calls) | Fetches OpenTargets scores and UniProt protein profile before agents run |
+| **Prefetch** | — (API calls) | Fetches OpenTargets disease scores, known drugs, and clinical candidates before agents run |
 | **Biology Agent** | Haiku 4.5 | Searches PubMed, bioRxiv, and web for disease biology, genetic evidence, preclinical validation, safety signals |
 | **Clinical Trial Agent** | Haiku 4.5 | Searches ClinicalTrials.gov and web for clinical precedent, trial status, failures, and competitive landscape |
 | **Synthesis Agent** | Sonnet 4.6 | Combines all findings with RAG context to produce a structured report with confidence score and recommendation |
@@ -101,8 +73,7 @@ User Input — free-form text or structured fields
 
 | Source | What it provides |
 |--------|-----------------|
-| **OpenTargets** | Disease-target association scores, genetic evidence score, known drugs/clinical programs, safety liabilities |
-| **UniProt** | Protein function, subcellular location, transmembrane domains, disease associations |
+| **OpenTargets** | Disease-target association scores, genetic evidence score, known drugs/clinical programs |
 
 ### Biology Agent tools
 
