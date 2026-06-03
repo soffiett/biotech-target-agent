@@ -2,7 +2,9 @@
 
 A multi-agent system that evaluates whether a biotech company's drug target is likely to yield a successful large molecule (antibody/biologic) therapeutic.
 
-Built with LangGraph, Claude Haiku + Sonnet, and free public APIs (OpenTargets, UniProt, PubMed, ClinicalTrials.gov, bioRxiv). Designed for accuracy on a personal budget.
+Built with LangGraph, Claude Haiku + Sonnet, and free public APIs (OpenTargets, PubMed, ClinicalTrials.gov, bioRxiv). Designed for accuracy on a personal budget.
+
+**Live demo:** Deployed on AWS ECS Fargate (ARM64 Graviton2) — http://18.145.238.250:8501
 
 ---
 
@@ -177,7 +179,62 @@ python -m eval.runner --target VISTA --company ImmuNext --indication "solid tumo
 
 ---
 
-## Setup
+## Deployment (AWS)
+
+The app is containerised with Docker and deployed to AWS ECS Fargate.
+
+### Infrastructure
+
+| Component | AWS Service |
+|-----------|------------|
+| Container image | ECR (Elastic Container Registry) |
+| Container runtime | ECS Fargate (ARM64 Graviton2) |
+| API keys | Secrets Manager |
+| Logs | CloudWatch `/ecs/biotech-target-agent` |
+
+### Deploy from scratch
+
+**Prerequisites:** AWS CLI configured, Docker Desktop running.
+
+```bash
+# One-time infrastructure setup
+./deploy/setup.sh
+
+# Build, push, and deploy
+./deploy/deploy.sh
+
+# Get current public URL
+./deploy/get-url.sh
+```
+
+### Manage the running service
+
+```bash
+# Watch live logs
+aws logs tail /ecs/biotech-target-agent --follow --region us-west-1
+
+# Stop service (save cost when not demoing)
+aws ecs update-service --cluster biotech-target-agent \
+    --service biotech-target-agent --desired-count 0 --region us-west-1
+
+# Restart service
+aws ecs update-service --cluster biotech-target-agent \
+    --service biotech-target-agent --desired-count 1 --region us-west-1
+```
+
+### Cost estimate (AWS)
+
+| Resource | Cost |
+|----------|------|
+| Fargate 0.5 vCPU + 1GB RAM (ARM64) | ~$22/month |
+| Secrets Manager (3 secrets) | ~$1.20/month |
+| CloudWatch logs | ~$0.50/month |
+| ECR storage | free (under 500MB) |
+| **Total** | **~$24/month** |
+
+---
+
+## Local Setup
 
 ### 1. Clone and install
 
@@ -275,7 +332,6 @@ biotech-target-agent/
 ├── tools/
 │   ├── query_parser.py           # Free-form input → structured fields
 │   ├── opentargets.py            # OpenTargets GraphQL API
-│   ├── uniprot.py                # UniProt REST API
 │   ├── pubmed.py                 # PubMed E-utilities API
 │   ├── biorxiv.py                # bioRxiv/medRxiv via Europe PMC
 │   ├── clinicaltrials.py         # ClinicalTrials.gov v2 API
@@ -289,6 +345,12 @@ biotech-target-agent/
 │   ├── llm_judge.py              # Section rubric scoring (L2)
 │   ├── consistency_check.py      # Reliability check for novel targets
 │   └── runner.py                 # Evaluation orchestrator
-└── models/
-    └── schemas.py                # Pydantic output models
+├── models/
+│   └── schemas.py                # Pydantic output models
+├── deploy/
+│   ├── setup.sh                  # One-time AWS infrastructure setup
+│   ├── deploy.sh                 # Build, push, and deploy to Fargate
+│   └── get-url.sh                # Print current public IP
+├── Dockerfile                    # Container definition (linux/arm64)
+└── .dockerignore
 ```
