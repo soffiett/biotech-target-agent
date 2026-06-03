@@ -10,7 +10,28 @@ Built with LangGraph, Claude Haiku + Sonnet, and free public APIs (OpenTargets, 
 
 ## Architecture
 
-![Agentic Workflow](workflow_diagram.png)
+```
+User Input (free-form text or structured fields)
+              │
+        [Query Parser]           Haiku 4.5
+              │
+        [Prefetch Node]          OpenTargets API
+              │
+     ┌────────┴────────┐
+     ▼                 ▼
+[Biology Agent]  [Clinical Trial Agent]    Haiku 4.5 — run in parallel
+  · PubMed         · ClinicalTrials.gov
+  · bioRxiv        · Tavily
+  · Tavily
+     └────────┬────────┘
+              ▼
+      [Synthesis Agent]          Sonnet 4.6
+       · ChromaDB RAG
+              │
+         [Judge Node]            Sonnet 4.6 — scores report quality
+              │
+     [Assessment Report]
+```
 
 ### Node responsibilities
 
