@@ -10,49 +10,7 @@ Built with LangGraph, Claude Haiku + Sonnet, and free public APIs (OpenTargets, 
 
 ## Architecture
 
-```mermaid
-flowchart TD
-    UI["🖥️ Streamlit UI\nFree-form text or structured fields"]
-    QP["🔍 Query Parser\nHaiku 4.5 · Extracts target / company / indication"]
-    PF["📡 Prefetch Node\nOpenTargets · Disease scores · Known drugs · Clinical candidates"]
-
-    BIO["🧬 Biology Agent\nHaiku 4.5"]
-    CT["💊 Clinical Trial Agent\nHaiku 4.5"]
-
-    PM["PubMed\nPeer-reviewed papers"]
-    BRX["bioRxiv\nPreprints via Europe PMC"]
-    TW1["Tavily\nWeb search"]
-    CTG["ClinicalTrials.gov v2\nTrial phase & status"]
-    TW2["Tavily\nWeb search"]
-
-    RAG["🗄️ ChromaDB RAG\nTarget validation framework\nDruggability guide · Clinical stages"]
-    SYN["📊 Synthesis Agent\nSonnet 4.6 · Combines all findings"]
-    JDG["⚖️ Judge Node\nSonnet 4.6 · Scores report 1–5 per section"]
-    OUT["📋 Assessment Report\nRecommendation · Confidence Score\nBiology · Druggability · Clinical · Risks · Quality"]
-
-    UI --> QP --> PF
-    PF --> BIO & CT
-    BIO --> PM & BRX & TW1
-    CT --> CTG & TW2
-    BIO & CT --> SYN
-    RAG --> SYN
-    SYN --> JDG --> OUT
-
-    style UI fill:#4A90D9,color:#fff
-    style QP fill:#7B68EE,color:#fff
-    style PF fill:#20B2AA,color:#fff
-    style BIO fill:#E8834E,color:#fff
-    style CT fill:#E8834E,color:#fff
-    style PM fill:#95C8A0,color:#333
-    style BRX fill:#95C8A0,color:#333
-    style TW1 fill:#95C8A0,color:#333
-    style CTG fill:#95C8A0,color:#333
-    style TW2 fill:#95C8A0,color:#333
-    style RAG fill:#D4A843,color:#fff
-    style SYN fill:#C0504D,color:#fff
-    style JDG fill:#8B6AB0,color:#fff
-    style OUT fill:#2E7D32,color:#fff
-```
+![Agentic Workflow](workflow_diagram.png)
 
 ### Node responsibilities
 
