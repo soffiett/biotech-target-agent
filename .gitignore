@@ -12,3 +12,4 @@ build/
 .pytest_cache/
 logs/
 workflow_diagram.png
+deploy/.aws-config

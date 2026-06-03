@@ -1,0 +1,26 @@
+# Secrets — never in the image
+.env
+
+# Virtual environment — rebuilt inside the image
+.venv/
+venv/
+
+# Generated files
+rag/chroma_db/
+logs/
+workflow_diagram.png
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+
+# Git
+.git/
+.gitignore
+
+# Dev files
+.pytest_cache/
+.DS_Store
+.Rhistory
