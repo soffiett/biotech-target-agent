@@ -70,6 +70,11 @@ def clinical_trials_node(state: TargetAssessmentState) -> dict:
 
     prefetch_summary = state.get("prefetch_context", {}).get("combined_summary", "")
 
+    clinical_focus = state.get("prefetch_context", {}).get(
+        "clinical_focus",
+        "Search broadly for any clinical programs targeting this pathway.",
+    )
+
     messages = [
         {
             "role": "user",
@@ -78,8 +83,9 @@ def clinical_trials_node(state: TargetAssessmentState) -> dict:
                 f"Company developing it: {company}\n"
                 f"Indication: {indication}\n\n"
                 f"## Pre-fetched Evidence Baseline\n{prefetch_summary}\n\n"
-                "The known drugs above are a starting point — search ClinicalTrials.gov to get "
-                "current phase, status, and any recent updates. Investigate failures and gaps."
+                f"## Your Research Focus\n{clinical_focus}\n\n"
+                "Search ClinicalTrials.gov and the web. Address the focus areas above — "
+                "do not re-confirm what the baseline already lists."
             ),
         }
     ]

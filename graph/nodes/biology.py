@@ -88,6 +88,11 @@ def biology_node(state: TargetAssessmentState) -> dict:
     indication = state.get("indication", "not specified")
     prefetch_summary = state.get("prefetch_context", {}).get("combined_summary", "")
 
+    biology_focus = state.get("prefetch_context", {}).get(
+        "biology_focus",
+        "Cover all areas: target biology, genetic evidence, disease mechanism, and druggability.",
+    )
+
     messages = [
         {
             "role": "user",
@@ -96,8 +101,9 @@ def biology_node(state: TargetAssessmentState) -> dict:
                 f"Company: {company}\n"
                 f"Indication: {indication}\n\n"
                 f"## Pre-fetched Evidence Baseline\n{prefetch_summary}\n\n"
-                "Use the baseline above to guide your searches — focus on gaps and go deeper "
-                "on signals that need further investigation. Search PubMed, bioRxiv, and the web."
+                f"## Your Research Focus\n{biology_focus}\n\n"
+                "Search PubMed, bioRxiv, and the web. Address the focus areas above — "
+                "do not re-confirm what the baseline already establishes."
             ),
         }
     ]
