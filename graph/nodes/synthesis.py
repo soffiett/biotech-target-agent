@@ -47,7 +47,14 @@ REPORT_TOOL = {
             },
             "confidence_reasoning": {
                 "type": "string",
-                "description": "Explain what drives the score up and what holds it back.",
+                "description": (
+                    "Structured reasoning for the confidence score. Must explicitly state: "
+                    "(1) what evidence drives the score UPWARD — e.g. genetic validation, approved drugs, "
+                    "strong preclinical models, guideline endorsement, clinical biomarker data; "
+                    "(2) what caps or holds the score back — e.g. commercial saturation, clinical failures, "
+                    "biology gaps, safety signals, mechanism-adjacent competition, non-responder ceiling. "
+                    "A bare number without this bidirectional justification is not acceptable."
+                ),
             },
             "recommendation": {
                 "type": "string",
