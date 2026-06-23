@@ -15,7 +15,7 @@ User Input (free-form text or structured fields)
               │
         [Query Parser]           Haiku 4.5
               │
-        [Prefetch Node]          OpenTargets API
+        [Prefetch Node]          OpenTargets API → derives per-agent research focus
               │
      ┌────────┴────────┐
      ▼                 ▼
@@ -25,10 +25,10 @@ User Input (free-form text or structured fields)
   · Tavily
      └────────┬────────┘
               ▼
-      [Synthesis Agent]          Sonnet 4.6
-       · ChromaDB RAG
+      [Synthesis Agent]          Sonnet 4.6 · ChromaDB RAG
               │
-         [Judge Node]            Sonnet 4.6 — scores report quality
+         [Judge Node]            Sonnet 4.6 — scores each section 1–5
+          · if biology ≤ 2/5 → re-runs Biology Agent with critique (max 1×)
               │
      [Assessment Report]
 ```
@@ -38,11 +38,22 @@ User Input (free-form text or structured fields)
 | Node | Model | Role |
 |------|-------|------|
 | **Query Parser** | Haiku 4.5 | Extracts target / company / indication from free-form text |
-| **Prefetch** | — (API calls) | Fetches OpenTargets disease scores, known drugs, and clinical candidates before agents run |
-| **Biology Agent** | Haiku 4.5 | Searches PubMed, bioRxiv, and web for disease biology, genetic evidence, preclinical validation, safety signals |
-| **Clinical Trial Agent** | Haiku 4.5 | Searches ClinicalTrials.gov and web for clinical precedent, trial status, failures, and competitive landscape |
-| **Synthesis Agent** | Sonnet 4.6 | Combines all findings with RAG context to produce a structured report with confidence score and recommendation |
-| **Judge Node** | Sonnet 4.6 | Scores each report section (1–5) against a rubric; surfaces weakest section and top improvement to the user |
+| **Prefetch** | — (API calls) | Fetches OpenTargets structured data; derives a tailored research brief for each downstream agent based on clinical stage and genetic evidence |
+| **Biology Agent** | Haiku 4.5 | Searches PubMed, bioRxiv, and web using a focus brief set by prefetch; re-runs with judge critique injected if initial score ≤ 2/5 |
+| **Clinical Trial Agent** | Haiku 4.5 | Searches ClinicalTrials.gov and web using a focus brief set by prefetch; maps trial phase, status, failures, and competitive landscape |
+| **Synthesis Agent** | Sonnet 4.6 | Combines all findings with RAG context to produce a structured report with bidirectional confidence reasoning |
+| **Judge Node** | Sonnet 4.6 | Scores each section (1–5) against a rubric; routes back to Biology Agent if biology score ≤ 2/5, otherwise surfaces report to user |
+
+### Context engineering
+
+The prefetch node reads OpenTargets structured output (approved drugs, clinical stage, genetic association scores) and generates a different research brief for each agent before they run:
+
+| Signal from OpenTargets | Biology agent directed to... | Clinical agent directed to... |
+|------------------------|------------------------------|-------------------------------|
+| Approved drug exists | Focus on mechanism, resistance, safety — skip proof-of-concept | Map differentiation gaps, biosimilars, label expansions |
+| Phase 2/3 programs | Assess responder biomarkers and combination biology | Investigate failure root causes and timelines |
+| High genetic score, no drugs | Validate translational gap and druggability | Search for Phase 1 / dropped programs |
+| Novel target | Be thorough and flag thin evidence explicitly | Search pathway analogs and academic studies |
 
 ---
 
@@ -209,7 +220,7 @@ TAVILY_API_KEY=...      # https://tavily.com (free tier: 1000 searches/month)
 NCBI_EMAIL=...          # any email — required by PubMed API policy
 ```
 
-OpenTargets, UniProt, ClinicalTrials.gov, and bioRxiv are all free with no key required.
+OpenTargets, ClinicalTrials.gov, and bioRxiv are all free with no key required.
 
 ### 3. Run
 
@@ -226,24 +237,25 @@ The ChromaDB knowledge base is built automatically on first launch. The `BAAI/bg
 | Component | Model / Service | Cost per query |
 |-----------|----------------|---------------|
 | Query parser | Claude Haiku 4.5 | ~$0.001 |
-| Prefetch | OpenTargets + UniProt (free APIs) | $0 |
+| Prefetch | OpenTargets (free API) | $0 |
 | Biology agent | Claude Haiku 4.5 | ~$0.005–0.01 |
 | Clinical trial agent | Claude Haiku 4.5 | ~$0.005–0.01 |
 | Synthesis | Claude Sonnet 4.6 | ~$0.02–0.05 |
 | Judge node | Claude Sonnet 4.6 | ~$0.02–0.03 |
+| Biology re-run (if triggered) | Claude Haiku 4.5 + Sonnet 4.6 | ~$0.03 extra |
 | Web search | Tavily (free tier: 1000/month) | $0 |
 | Embeddings | sentence-transformers (local CPU) | $0 |
-| **Total** | | **~$0.05–0.10 per query** |
+| **Total** | | **~$0.05–0.13 per query** |
 
 ---
 
 ## Tech Stack
 
-- **Orchestration**: LangGraph (StateGraph — prefetch → parallel → synthesis → judge)
+- **Orchestration**: LangGraph (StateGraph — prefetch → parallel → synthesis → judge → conditional re-run)
 - **LLMs**: Claude Haiku 4.5 (search agents, parser) + Claude Sonnet 4.6 (synthesis, judge)
 - **Vector store**: ChromaDB (local, persistent)
 - **Embeddings**: `BAAI/bge-base-en-v1.5` via sentence-transformers (CPU)
-- **APIs**: OpenTargets GraphQL, UniProt REST, PubMed E-utilities, ClinicalTrials.gov v2, Europe PMC (bioRxiv), Tavily
+- **APIs**: OpenTargets GraphQL, PubMed E-utilities, ClinicalTrials.gov v2, Europe PMC (bioRxiv), Tavily
 - **UI**: Streamlit
 
 ---
@@ -274,7 +286,7 @@ biotech-target-agent/
 │   ├── state.py                  # LangGraph shared state (TypedDict)
 │   ├── orchestrator.py           # Graph definition and compilation
 │   └── nodes/
-│       ├── prefetch.py           # OpenTargets + UniProt pre-fetch
+│       ├── prefetch.py           # OpenTargets pre-fetch + per-agent focus injection
 │       ├── biology.py            # Biology search agent
 │       ├── clinical_trials.py    # Clinical trial search agent
 │       ├── synthesis.py          # Report synthesis agent
