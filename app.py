@@ -81,6 +81,8 @@ if submitted and target and company:
             "errors": [],
             "report": None,
             "quality_assessment": None,
+            "rerun_count": 0,
+            "judge_critique": None,
         })
 
         status.update(label="Assessment complete", state="complete")

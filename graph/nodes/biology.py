@@ -93,6 +93,23 @@ def biology_node(state: TargetAssessmentState) -> dict:
         "Cover all areas: target biology, genetic evidence, disease mechanism, and druggability.",
     )
 
+    judge_critique = state.get("judge_critique")
+    rerun_count = state.get("rerun_count", 0)
+
+    if judge_critique and rerun_count > 0:
+        issues = "\n".join(f"  - {i}" for i in judge_critique.get("biology_issues", []))
+        critique_section = (
+            f"\n\n## Judge Critique — Previous Attempt Scored {judge_critique['biology_score']}/5\n"
+            f"Specific issues identified:\n{issues}\n"
+            f"Required improvement: {judge_critique.get('top_improvement', '')}\n\n"
+            "Your previous biology findings are already recorded in state — do NOT repeat searches "
+            "you already ran. Focus exclusively on the gaps above."
+        )
+        log.info(f"[{target}/{company}] Biology re-run (attempt {rerun_count + 1}) — "
+                 f"addressing judge critique")
+    else:
+        critique_section = ""
+
     messages = [
         {
             "role": "user",
@@ -101,7 +118,8 @@ def biology_node(state: TargetAssessmentState) -> dict:
                 f"Company: {company}\n"
                 f"Indication: {indication}\n\n"
                 f"## Pre-fetched Evidence Baseline\n{prefetch_summary}\n\n"
-                f"## Your Research Focus\n{biology_focus}\n\n"
+                f"## Your Research Focus\n{biology_focus}\n"
+                f"{critique_section}\n"
                 "Search PubMed, bioRxiv, and the web. Address the focus areas above — "
                 "do not re-confirm what the baseline already establishes."
             ),
@@ -152,4 +170,8 @@ def biology_node(state: TargetAssessmentState) -> dict:
                     tool_results.append({"type": "tool_result", "tool_use_id": block.id, "content": result})
             messages.append({"role": "user", "content": tool_results})
 
-    return {"bio_findings": findings, "errors": errors}
+    return {
+        "bio_findings": findings,
+        "errors": errors,
+        "rerun_count": rerun_count + 1,
+    }
