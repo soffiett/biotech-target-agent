@@ -67,23 +67,77 @@ if submitted and not (target and company):
 
 # ── Run assessment ───────────────────────────────────────────────────────────
 if submitted and target and company:
-    with st.status("Running multi-agent assessment...", expanded=True) as status:
-        st.write("Biology agent searching PubMed and web...")
-        st.write("Clinical trial agent searching ClinicalTrials.gov...")
+    initial_state = {
+        "target": target,
+        "company": company,
+        "indication": indication or "not specified",
+        "prefetch_context": {},
+        "bio_findings": [],
+        "trial_findings": [],
+        "errors": [],
+        "report": None,
+        "quality_assessment": None,
+        "rerun_count": 0,
+        "judge_critique": None,
+    }
 
-        result = graph.invoke({
-            "target": target,
-            "company": company,
-            "indication": indication or "not specified",
-            "prefetch_context": {},
-            "bio_findings": [],
-            "trial_findings": [],
-            "errors": [],
-            "report": None,
-            "quality_assessment": None,
-            "rerun_count": 0,
-            "judge_critique": None,
-        })
+    # Accumulate final state from streaming events
+    result = dict(initial_state)
+
+    with st.status("Running multi-agent assessment...", expanded=True) as status:
+        for event in graph.stream(initial_state, stream_mode="updates"):
+            for node_name, update in event.items():
+                # Merge update into result (operator.add lists must be appended)
+                for key, val in update.items():
+                    if key in ("bio_findings", "trial_findings", "errors") and isinstance(val, list):
+                        result[key] = result.get(key, []) + val
+                    else:
+                        result[key] = val
+
+                # Per-node status messages
+                if node_name == "prefetch":
+                    ot = update.get("prefetch_context", {}).get("opentargets", {})
+                    n_drugs = len(ot.get("known_drugs", []))
+                    n_diseases = len(ot.get("top_diseases", []))
+                    st.write(
+                        f"Prefetch: OpenTargets returned {n_drugs} clinical candidate(s), "
+                        f"{n_diseases} disease association(s) — research focus set"
+                    )
+
+                elif node_name == "biology":
+                    rc = update.get("rerun_count", 1)
+                    if rc > 1:
+                        critique = result.get("judge_critique", {})
+                        score = critique.get("biology_score", "?") if critique else "?"
+                        st.write(
+                            f"Biology re-run triggered (previous score: {score}/5) — "
+                            "searching for gaps identified by judge"
+                        )
+                    else:
+                        n = len(update.get("bio_findings", []))
+                        st.write(f"Biology agent: {n} finding(s) from PubMed, bioRxiv, web")
+
+                elif node_name == "clinical_trials":
+                    n = len(update.get("trial_findings", []))
+                    st.write(f"Clinical trial agent: {n} finding(s) from ClinicalTrials.gov")
+
+                elif node_name == "synthesis":
+                    rep = update.get("report") or {}
+                    rec = rep.get("recommendation", "")
+                    score = rep.get("confidence_score", "")
+                    st.write(f"Synthesis complete — {rec}, confidence {score}/10")
+
+                elif node_name == "judge":
+                    qa = update.get("quality_assessment") or {}
+                    overall = qa.get("overall_quality", "?")
+                    critique = update.get("judge_critique")
+                    msg = f"Judge: overall report quality {overall}/5"
+                    if critique:
+                        msg += (
+                            f" — biology scored {critique['biology_score']}/5, "
+                            "re-running with targeted critique"
+                        )
+                    st.write(msg)
 
         status.update(label="Assessment complete", state="complete")
 

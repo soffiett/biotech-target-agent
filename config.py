@@ -12,7 +12,7 @@ PARSER_MAX_TOKENS = 256
 
 # ── Agentic loop ──────────────────────────────────────────────────────────────
 # Max number of tool-call iterations per search agent before forcing a summary
-MAX_TOOL_ITERATIONS = 8
+MAX_TOOL_ITERATIONS = 5
 
 # ── RAG ───────────────────────────────────────────────────────────────────────
 RAG_TOP_K = 4  # number of chunks retrieved for synthesis context
