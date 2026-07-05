@@ -1,6 +1,9 @@
+import copy
 import anthropic
+from pydantic import ValidationError
 from rag.vectorstore import query_knowledge_base
 from graph.state import TargetAssessmentState
+from models.schemas import AssessmentReport
 from config import (
     SYNTHESIS_MODEL,
     SYNTHESIS_MAX_TOKENS,
@@ -13,73 +16,50 @@ log = get_logger(__name__)
 
 _client = anthropic.Anthropic()
 
-# Force structured output via tool use
+
+def _resolve_refs(schema: dict) -> dict:
+    """
+    Inline $defs/$ref entries produced by Pydantic so the schema is
+    self-contained. The Anthropic tool API does not support $ref references.
+    """
+    schema = copy.deepcopy(schema)
+    defs = schema.pop("$defs", {})
+
+    def _inline(obj):
+        if isinstance(obj, dict):
+            if "$ref" in obj:
+                ref_name = obj["$ref"].split("/")[-1]
+                resolved = {k: v for k, v in defs.get(ref_name, obj).items()
+                            if k != "title"}
+                return resolved
+            return {k: _inline(v) for k, v in obj.items() if k != "title"}
+        if isinstance(obj, list):
+            return [_inline(i) for i in obj]
+        return obj
+
+    return _inline(schema)
+
+
+def _build_report_tool_schema() -> dict:
+    """
+    Derive the tool input_schema from AssessmentReport.
+    target and company are injected from LangGraph state, not filled by the LLM.
+    """
+    raw = AssessmentReport.model_json_schema()
+    schema = _resolve_refs(raw)
+    for field in ("target", "company"):
+        schema.get("properties", {}).pop(field, None)
+        if field in schema.get("required", []):
+            schema["required"].remove(field)
+    return schema
+
+
+# Tool schema is generated from the Pydantic model — descriptions stay in one place.
 REPORT_TOOL = {
     "name": "create_assessment_report",
     "description": "Submit the final structured assessment of the drug target.",
-    "input_schema": {
-        "type": "object",
-        "properties": {
-            "biology_rationale": {
-                "type": "string",
-                "description": "Assessment of biological evidence supporting this target (genetic, preclinical, mechanistic).",
-            },
-            "druggability_assessment": {
-                "type": "string",
-                "description": "Assessment of whether this target is suitable for a large molecule approach — accessibility, format, PK considerations.",
-            },
-            "clinical_precedent": {
-                "type": "string",
-                "description": "Summary of existing clinical trials for this target or related mechanisms, including phase and status.",
-            },
-            "competitive_landscape": {
-                "type": "string",
-                "description": "Overview of other programs (approved or in development) targeting this biology.",
-            },
-            "key_risks": {
-                "type": "array",
-                "items": {"type": "string"},
-                "description": "Top 3–5 risks or concerns. Be specific.",
-            },
-            "confidence_score": {
-                "type": "number",
-                "description": "0–10. 8–10: highly validated target, clear path. 5–7: moderate evidence, meaningful uncertainties. 0–4: weak evidence or significant red flags.",
-            },
-            "confidence_reasoning": {
-                "type": "string",
-                "description": (
-                    "Structured reasoning for the confidence score. Must explicitly state: "
-                    "(1) what evidence drives the score UPWARD — e.g. genetic validation, approved drugs, "
-                    "strong preclinical models, guideline endorsement, clinical biomarker data; "
-                    "(2) what caps or holds the score back — e.g. commercial saturation, clinical failures, "
-                    "biology gaps, safety signals, mechanism-adjacent competition, non-responder ceiling. "
-                    "A bare number without this bidirectional justification is not acceptable."
-                ),
-            },
-            "recommendation": {
-                "type": "string",
-                "enum": ["Strong", "Moderate", "Weak", "Against"],
-                "description": "Strong: pursue. Moderate: worth exploring with caveats. Weak: significant concerns. Against: fundamental issues.",
-            },
-            "recommendation_summary": {
-                "type": "string",
-                "description": "2–3 sentence plain-English summary of the assessment for a non-expert audience.",
-            },
-        },
-        "required": [
-            "biology_rationale",
-            "druggability_assessment",
-            "clinical_precedent",
-            "competitive_landscape",
-            "key_risks",
-            "confidence_score",
-            "confidence_reasoning",
-            "recommendation",
-            "recommendation_summary",
-        ],
-    },
+    "input_schema": _build_report_tool_schema(),
 }
-
 
 
 def synthesis_node(state: TargetAssessmentState) -> dict:
@@ -130,13 +110,25 @@ Now create the structured assessment report."""
     report = {}
     for block in response.content:
         if block.type == "tool_use" and block.name == "create_assessment_report":
-            report = block.input
+            try:
+                validated = AssessmentReport.model_validate({
+                    **block.input,
+                    "target": target,
+                    "company": company,
+                })
+                report = validated.model_dump()
+                log.info(
+                    f"[{target}/{company}] Synthesis done — "
+                    f"recommendation={report['recommendation']} "
+                    f"confidence={report['confidence_score']}"
+                )
+            except ValidationError as e:
+                log.warning(
+                    f"[{target}/{company}] Report validation failed: {e} — using raw output")
+                report = {**block.input, "target": target, "company": company}
             break
 
-    if report:
-        log.info(f"[{target}/{company}] Synthesis done — recommendation={report.get('recommendation')} "
-                 f"confidence={report.get('confidence_score')}")
-    else:
+    if not report:
         log.error(f"[{target}/{company}] Synthesis failed — no report returned")
 
     return {"report": report}

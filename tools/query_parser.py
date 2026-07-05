@@ -4,7 +4,7 @@ from models.schemas import ParsedQuery
 from pydantic import ValidationError
 _client = anthropic.Anthropic()
 
-_  # Schema is GENERATED from the model, so the two can't drift apart.
+# Schema is generated from the model so the tool definition and type can't drift apart.
 _PARSE_TOOL = {
     "name": "extract_query_fields",
     "description": "Extract structured fields from a free-form biotech query.",

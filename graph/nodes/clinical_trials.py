@@ -11,6 +11,7 @@ from config import (
     MAX_TOOL_ITERATIONS,
     CLINICAL_TRIALS_SYSTEM_PROMPT,
 )
+from models.schemas import TrialFinding
 
 _client = anthropic.Anthropic()
 
@@ -64,15 +65,17 @@ def _run_tool(name: str, inputs: dict) -> str:
 
 
 def _harvest_text(content) -> list[dict]:
-    """Pull any non-empty text blocks into finding dicts."""
+    """Pull any non-empty text blocks into validated TrialFinding dicts."""
     out = []
     for block in content:
         if hasattr(block, "text") and block.text.strip():
-            out.append({
-                "type": "trial_summary",
-                "content": block.text,
-                "source": "clinical_trials_agent",
-            })
+            out.append(
+                TrialFinding(
+                    type="trial_summary",
+                    content=block.text,
+                    source="clinical_trials_agent",
+                ).model_dump()
+            )
     return out
 
 

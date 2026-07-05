@@ -11,6 +11,7 @@ from config import (
     MAX_TOOL_ITERATIONS,
     BIOLOGY_SYSTEM_PROMPT,
 )
+from models.schemas import BiologyFinding
 from logger import get_logger
 
 log = get_logger(__name__)
@@ -83,15 +84,17 @@ def _run_tool(name: str, inputs: dict) -> str:
 
 
 def _harvest_text(content) -> list[dict]:
-    """Pull any non-empty text blocks into finding dicts."""
+    """Pull any non-empty text blocks into validated BiologyFinding dicts."""
     out = []
     for block in content:
         if hasattr(block, "text") and block.text.strip():
-            out.append({
-                "type": "biology_summary",
-                "content": block.text,
-                "source": "biology_agent",
-            })
+            out.append(
+                BiologyFinding(
+                    type="biology_summary",
+                    content=block.text,
+                    source="biology_agent",
+                ).model_dump()
+            )
     return out
 
 
