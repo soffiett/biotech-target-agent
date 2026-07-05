@@ -22,10 +22,11 @@ class TargetAssessmentState(TypedDict):
 
     # Judge → biology re-run loop
     rerun_count: int          # incremented each time biology node runs; caps re-runs at 1
-    judge_critique: Optional[dict]  # set by judge when biology scores <= 2; injected into re-run
+    # set by judge when biology scores <= 2; injected into re-run
+    judge_critique: Optional[dict]
 
 
-def make_initial_state(target: str, company: str, indication: str = "") -> dict:
+def make_initial_state(target: str, company: str, indication: str = "") -> TargetAssessmentState:
     """
     Canonical initial state for graph.invoke() and graph.stream().
     All callers must use this so new fields are never silently missing
