@@ -63,6 +63,19 @@ def _run_tool(name: str, inputs: dict) -> str:
     return json.dumps({"error": "unknown tool"})
 
 
+def _harvest_text(content) -> list[dict]:
+    """Pull any non-empty text blocks into finding dicts."""
+    out = []
+    for block in content:
+        if hasattr(block, "text") and block.text.strip():
+            out.append({
+                "type": "trial_summary",
+                "content": block.text,
+                "source": "clinical_trials_agent",
+            })
+    return out
+
+
 def clinical_trials_node(state: TargetAssessmentState) -> dict:
     target = state["target"]
     company = state["company"]
@@ -117,10 +130,29 @@ def clinical_trials_node(state: TargetAssessmentState) -> dict:
 
         messages.append({"role": "assistant", "content": response.content})
 
+        if response.stop_reason == "max_tokens":
+            log.warning(
+                f"[{target}/{company}] Clinical trials response truncated at max_tokens "
+                f"(iteration {_ + 1})"
+            )
+            partial = _harvest_text(response.content)
+            if partial:
+                findings.extend(partial)
+                log.info(
+                    f"[{target}/{company}] Salvaged {len(partial)} partial finding(s) before truncation")
+            truncated_tool_call = any(
+                getattr(b, "type", None) == "tool_use" for b in response.content
+            )
+            if truncated_tool_call:
+                errors.append(
+                    "Clinical trials agent truncated mid-tool-call; findings may be incomplete.")
+            else:
+                errors.append(
+                    "Clinical trials agent truncated mid-text; findings may be incomplete.")
+            break
+
         if response.stop_reason == "end_turn":
-            for block in response.content:
-                if hasattr(block, "text") and block.text.strip():
-                    findings.append({"type": "trial_summary", "content": block.text, "source": "clinical_trials_agent"})
+            findings.extend(_harvest_text(response.content))
             log.info(f"[{target}/{company}] Trial agent done — {tool_call_count} tool calls, {len(findings)} findings")
             break
 
@@ -133,5 +165,12 @@ def clinical_trials_node(state: TargetAssessmentState) -> dict:
                     result = _run_tool(block.name, block.input)
                     tool_results.append({"type": "tool_result", "tool_use_id": block.id, "content": result})
             messages.append({"role": "user", "content": tool_results})
+            continue
+
+        log.warning(
+            f"[{target}/{company}] Unexpected stop_reason '{response.stop_reason}' — ending loop")
+        errors.append(
+            f"Clinical trials agent ended on unexpected stop_reason: {response.stop_reason}")
+        break
 
     return {"trial_findings": findings, "errors": errors}

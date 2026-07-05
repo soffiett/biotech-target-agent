@@ -1,4 +1,3 @@
-from tools.opentargets import STAGE_PHASE_2
 from tools.opentargets import get_opentargets_data, format_for_context as ot_format
 from graph.state import TargetAssessmentState
 from logger import get_logger

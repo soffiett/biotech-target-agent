@@ -82,11 +82,25 @@ def _run_tool(name: str, inputs: dict) -> str:
     return json.dumps({"error": "unknown tool"})
 
 
+def _harvest_text(content) -> list[dict]:
+    """Pull any non-empty text blocks into finding dicts."""
+    out = []
+    for block in content:
+        if hasattr(block, "text") and block.text.strip():
+            out.append({
+                "type": "biology_summary",
+                "content": block.text,
+                "source": "biology_agent",
+            })
+    return out
+
+
 def biology_node(state: TargetAssessmentState) -> dict:
     target = state["target"]
     company = state["company"]
     indication = state.get("indication", "not specified")
-    prefetch_summary = state.get("prefetch_context", {}).get("combined_summary", "")
+    prefetch_summary = state.get(
+        "prefetch_context", {}).get("combined_summary", "")
 
     biology_focus = state.get("prefetch_context", {}).get(
         "biology_focus",
@@ -97,7 +111,8 @@ def biology_node(state: TargetAssessmentState) -> dict:
     rerun_count = state.get("rerun_count", 0)
 
     if judge_critique and rerun_count > 0:
-        issues = "\n".join(f"  - {i}" for i in judge_critique.get("biology_issues", []))
+        issues = "\n".join(
+            f"  - {i}" for i in judge_critique.get("biology_issues", []))
         critique_section = (
             f"\n\n## Judge Critique — Previous Attempt Scored {judge_critique['biology_score']}/5\n"
             f"Specific issues identified:\n{issues}\n"
@@ -128,7 +143,6 @@ def biology_node(state: TargetAssessmentState) -> dict:
 
     findings, errors = [], []
     tool_call_count = 0
-
     log.info(f"[{target}/{company}] Biology agent started")
 
     for iteration in range(MAX_TOOL_ITERATIONS):
@@ -145,7 +159,8 @@ def biology_node(state: TargetAssessmentState) -> dict:
                 break
             except anthropic.RateLimitError:
                 wait = 30 * (attempt + 1)
-                log.warning(f"[{target}/{company}] Rate limit hit (attempt {attempt+1}), waiting {wait}s...")
+                log.warning(
+                    f"[{target}/{company}] Rate limit hit (attempt {attempt+1}), waiting {wait}s...")
                 time.sleep(wait)
         else:
             errors.append("Biology agent hit rate limit after 3 retries.")
@@ -153,11 +168,37 @@ def biology_node(state: TargetAssessmentState) -> dict:
 
         messages.append({"role": "assistant", "content": response.content})
 
+        # --- NEW: handle truncation explicitly ---
+        if response.stop_reason == "max_tokens":
+            log.warning(
+                f"[{target}/{company}] Biology response truncated at max_tokens "
+                f"(iteration {iteration + 1})"
+            )
+            # Salvage any partial text the model did produce before the cutoff.
+            partial = _harvest_text(response.content)
+            if partial:
+                findings.extend(partial)
+                log.info(
+                    f"[{target}/{company}] Salvaged {len(partial)} partial finding(s) before truncation")
+
+            # If it was cut off mid-tool-call, the tool_use block may be malformed
+            # or unanswerable — do not attempt to run it. Record and stop cleanly.
+            truncated_tool_call = any(
+                getattr(b, "type", None) == "tool_use" for b in response.content
+            )
+            if truncated_tool_call:
+                errors.append(
+                    "Biology agent truncated mid-tool-call; findings may be incomplete.")
+            else:
+                errors.append(
+                    "Biology agent truncated mid-text; findings may be incomplete.")
+            break
+        # --- END NEW ---
+
         if response.stop_reason == "end_turn":
-            for block in response.content:
-                if hasattr(block, "text") and block.text.strip():
-                    findings.append({"type": "biology_summary", "content": block.text, "source": "biology_agent"})
-            log.info(f"[{target}/{company}] Biology agent done — {tool_call_count} tool calls, {len(findings)} findings")
+            findings.extend(_harvest_text(response.content))
+            log.info(
+                f"[{target}/{company}] Biology agent done — {tool_call_count} tool calls, {len(findings)} findings")
             break
 
         if response.stop_reason == "tool_use":
@@ -165,10 +206,20 @@ def biology_node(state: TargetAssessmentState) -> dict:
             for block in response.content:
                 if block.type == "tool_use":
                     tool_call_count += 1
-                    log.debug(f"[{target}/{company}] Biology tool call: {block.name}({block.input.get('query', '')})")
+                    log.debug(
+                        f"[{target}/{company}] Biology tool call: {block.name}({block.input.get('query', '')})")
                     result = _run_tool(block.name, block.input)
-                    tool_results.append({"type": "tool_result", "tool_use_id": block.id, "content": result})
+                    tool_results.append(
+                        {"type": "tool_result", "tool_use_id": block.id, "content": result})
             messages.append({"role": "user", "content": tool_results})
+            continue
+
+        # --- NEW: unknown stop_reason — don't silently spin ---
+        log.warning(
+            f"[{target}/{company}] Unexpected stop_reason '{response.stop_reason}' — ending loop")
+        errors.append(
+            f"Biology agent ended on unexpected stop_reason: {response.stop_reason}")
+        break
 
     return {
         "bio_findings": findings,

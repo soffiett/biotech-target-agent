@@ -192,9 +192,9 @@ def format_for_context(data: dict) -> str:
     lines += ["", "### Clinical Candidates & Approved Drugs"]
     if data["known_drugs"]:
         for dr in data["known_drugs"][:8]:
-            status = "APPROVED" if dr["is_approved"] else dr["max_stage"]
-            indications = ", ".join(dr["indications"]) or "unknown indication"
-            lines.append(f"- {dr['name']} ({status}) — {indications}")
+            status = dr.get("stage_label") or dr.get("max_stage", "unknown")
+            withdrawn = " [WITHDRAWN]" if dr.get("is_withdrawn") else ""
+            lines.append(f"- {dr['name']} ({status}){withdrawn}")
     else:
         lines.append("- No clinical candidates found.")
 
