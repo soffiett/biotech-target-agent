@@ -8,7 +8,7 @@ class TargetAssessmentState(TypedDict):
     company: str
     indication: str
 
-    # Pre-fetched structured data (OpenTargets + UniProt) — set before parallel nodes
+    # Pre-fetched structured data (OpenTargets) — set before parallel nodes
     prefetch_context: dict
 
     # Parallel node outputs — operator.add merges lists from concurrent nodes
@@ -23,3 +23,24 @@ class TargetAssessmentState(TypedDict):
     # Judge → biology re-run loop
     rerun_count: int          # incremented each time biology node runs; caps re-runs at 1
     judge_critique: Optional[dict]  # set by judge when biology scores <= 2; injected into re-run
+
+
+def make_initial_state(target: str, company: str, indication: str = "") -> dict:
+    """
+    Canonical initial state for graph.invoke() and graph.stream().
+    All callers must use this so new fields are never silently missing
+    in eval runs vs. production runs.
+    """
+    return {
+        "target": target,
+        "company": company,
+        "indication": indication or "not specified",
+        "prefetch_context": {},
+        "bio_findings": [],
+        "trial_findings": [],
+        "errors": [],
+        "report": None,
+        "quality_assessment": None,
+        "rerun_count": 0,
+        "judge_critique": None,
+    }

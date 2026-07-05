@@ -5,6 +5,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from graph.orchestrator import graph
+from graph.state import make_initial_state
 from rag.ingestion import ingest_static_documents
 from tools.query_parser import parse_query
 
@@ -67,19 +68,7 @@ if submitted and not (target and company):
 
 # ── Run assessment ───────────────────────────────────────────────────────────
 if submitted and target and company:
-    initial_state = {
-        "target": target,
-        "company": company,
-        "indication": indication or "not specified",
-        "prefetch_context": {},
-        "bio_findings": [],
-        "trial_findings": [],
-        "errors": [],
-        "report": None,
-        "quality_assessment": None,
-        "rerun_count": 0,
-        "judge_critique": None,
-    }
+    initial_state = make_initial_state(target, company, indication)
 
     # Accumulate final state from streaming events
     result = dict(initial_state)

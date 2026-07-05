@@ -7,22 +7,14 @@ Divergence signals low reliability and triggers Level 2 (LLM judge) diagnosis.
 """
 
 from graph.orchestrator import graph
+from graph.state import make_initial_state
 from config import CONSISTENCY_RUNS
 
 RECOMMENDATION_ORDER = ["Against", "Weak", "Moderate", "Strong"]
 
 
 def _run_once(target: str, company: str, indication: str) -> dict:
-    result = graph.invoke({
-        "target": target,
-        "company": company,
-        "indication": indication or "not specified",
-        "prefetch_context": {},
-        "bio_findings": [],
-        "trial_findings": [],
-        "errors": [],
-        "report": None,
-    })
+    result = graph.invoke(make_initial_state(target, company, indication))
     return result.get("report", {})
 
 

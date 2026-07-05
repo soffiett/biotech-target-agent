@@ -16,22 +16,14 @@ import argparse
 import json
 import sys
 from graph.orchestrator import graph
+from graph.state import make_initial_state
 from eval.ground_truth import TEST_CASES, evaluate_report, summarize_results
 from eval.llm_judge import judge_report
 from eval.consistency_check import check_consistency
 
 
 def _run_agent(target: str, company: str, indication: str) -> dict:
-    result = graph.invoke({
-        "target": target,
-        "company": company,
-        "indication": indication or "not specified",
-        "prefetch_context": {},
-        "bio_findings": [],
-        "trial_findings": [],
-        "errors": [],
-        "report": None,
-    })
+    result = graph.invoke(make_initial_state(target, company, indication))
     return result.get("report", {})
 
 
