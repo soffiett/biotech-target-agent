@@ -107,6 +107,19 @@ Now create the structured assessment report."""
         messages=[{"role": "user", "content": user_message}],
     )
 
+    if response.stop_reason == "max_tokens":
+        log.error(
+            f"[{target}/{company}] Synthesis hit max_tokens — "
+            "report tool call was truncated and cannot be used"
+        )
+        return {
+            "report": {},
+            "errors": [
+                "Synthesis agent hit token limit before completing the report. "
+                "Try a shorter indication or reduce context size."
+            ],
+        }
+
     report = {}
     for block in response.content:
         if block.type == "tool_use" and block.name == "create_assessment_report":
