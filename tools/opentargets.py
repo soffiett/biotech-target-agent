@@ -2,6 +2,27 @@ import requests
 from logger import get_logger
 
 log = get_logger(__name__)
+
+# OpenTargets clinical-precedence vocabulary → (canonical_label, evidence_score).
+# The score is OpenTargets' own maturity ordinal (0.01–1.0); we reuse it directly
+# rather than inventing a parallel rank scale. Downstream code compares scores.
+_STAGE_TABLE = {
+    "UNKNOWN":        ("UNKNOWN",       0.01),
+    "PRECLINICAL":    ("PRECLINICAL",   0.01),
+    "IND":            ("IND",           0.05),
+    "EARLY PHASE I":  ("EARLY_PHASE_1", 0.05),
+    "PHASE I":        ("PHASE_1",       0.10),
+    "PHASE I/II":     ("PHASE_1_2",     0.15),
+    "PHASE II":       ("PHASE_2",       0.20),
+    "PHASE II/III":   ("PHASE_2_3",     0.50),
+    "PHASE III":      ("PHASE_3",       0.70),
+    "PREAPPROVAL":    ("PREAPPROVAL",   0.80),
+    "APPROVAL":       ("APPROVED",      1.00),
+    "PHASE IV":       ("PHASE_4",       1.00),
+    "WITHDRAWAL":     ("WITHDRAWN",     1.00),
+}
+
+
 OT_GRAPHQL = "https://api.platform.opentargets.org/api/v4/graphql"
 
 _SEARCH_QUERY = """
@@ -47,9 +68,34 @@ def _graphql(query: str, variables: dict) -> dict:
         timeout=15,
     )
     if not resp.ok:
-        log.error(f"OpenTargets API error {resp.status_code}: {resp.text[:300]}")
+        log.error(
+            f"OpenTargets API error {resp.status_code}: {resp.text[:300]}")
     resp.raise_for_status()
     return resp.json().get("data", {})
+
+# Tolerant lookup: OpenTargets' exact vocabulary isn't guaranteed stable and has
+# used several formats across versions ("PHASE III", "Phase III", "PHASE_III",
+# "PHASE3"). We normalize aggressively and log misses so format drift is visible.
+
+
+def _normalize_stage(raw: str) -> tuple[str, float]:
+    """
+    Map a raw OpenTargets clinical-stage string to (canonical_label, maturity_score).
+    maturity_score is OpenTargets' own clinical-precedence evidence score (0.01–1.0).
+    Unrecognized values are logged and treated as UNKNOWN, so upstream format drift
+    surfaces in logs instead of silently corrupting downstream focus routing.
+    """
+    if not raw:
+        return _STAGE_TABLE["UNKNOWN"]
+
+    # Normalize whitespace/case; keep "/" and roman numerals intact for exact lookup.
+    key = " ".join(raw.upper().replace("_", " ").split())
+    if key in _STAGE_TABLE:
+        return _STAGE_TABLE[key]
+
+    log.warning(
+        f"OpenTargets: unrecognized clinical stage '{raw}' — treated as UNKNOWN")
+    return _STAGE_TABLE["UNKNOWN"]
 
 
 def get_opentargets_data(target_symbol: str) -> dict:
@@ -77,7 +123,8 @@ def get_opentargets_data(target_symbol: str) -> dict:
         # Disease associations
         diseases = []
         for row in t.get("associatedDiseases", {}).get("rows", []):
-            scores = {s["id"]: round(s["score"], 3) for s in row.get("datatypeScores", [])}
+            scores = {s["id"]: round(s["score"], 3)
+                      for s in row.get("datatypeScores", [])}
             diseases.append({
                 "disease": row["disease"]["name"],
                 "overall_score": round(row["score"], 3),
@@ -91,7 +138,8 @@ def get_opentargets_data(target_symbol: str) -> dict:
         drugs = []
         for row in t.get("drugAndClinicalCandidates", {}).get("rows", []):
             drug = row.get("drug", {})
-            stage = row.get("maxClinicalStage", "")
+            raw_stage = row.get("maxClinicalStage", "")
+            stage_label, maturity = _normalize_stage(raw_stage)
             indications = list({
                 d.get("diseaseFromSource", "")
                 for d in row.get("diseases", [])
@@ -99,9 +147,11 @@ def get_opentargets_data(target_symbol: str) -> dict:
             })[:3]
             drugs.append({
                 "name": drug.get("name", ""),
-                "max_stage": stage,
-                "is_approved": stage == "APPROVAL",
-                "indications": indications,
+                "max_stage": raw_stage,           # raw, for display/debug
+                "stage_label": stage_label,       # canonical enum-like label
+                "maturity": maturity,             # OpenTargets precedence score 0.01–1.0
+                "is_approved": stage_label == "APPROVED",
+                "is_withdrawn": stage_label == "WITHDRAWN",
             })
 
         return {
@@ -115,7 +165,8 @@ def get_opentargets_data(target_symbol: str) -> dict:
         }
 
     except Exception as e:
-        log.error(f"OpenTargets lookup failed for '{target_symbol}': {e}", exc_info=True)
+        log.error(
+            f"OpenTargets lookup failed for '{target_symbol}': {e}", exc_info=True)
         return {"error": str(e)}
 
 

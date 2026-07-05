@@ -1,3 +1,4 @@
+from tools.opentargets import STAGE_PHASE_2
 from tools.opentargets import get_opentargets_data, format_for_context as ot_format
 from graph.state import TargetAssessmentState
 from logger import get_logger
@@ -28,7 +29,14 @@ def _build_focus_instructions(ot_data: dict) -> dict:
     diseases = ot_data.get("top_diseases", [])
 
     approved = [d for d in drugs if d["is_approved"]]
-    late_stage = [d for d in drugs if d["max_stage"] in ("PHASE3", "PHASE_III", "PHASE2", "PHASE_II")]
+    withdrawn = [d for d in drugs if d.get("is_withdrawn")]
+    # Late-stage = in Phase II/III or later, but not yet approved and not withdrawn.
+    # 0.5 is the Phase II/III precedence score; approval is 1.0, so this window is
+    # [0.5, 1.0) minus the withdrawn cases (which score 1.0 anyway).
+    late_stage = [
+        d for d in drugs
+        if 0.5 <= d.get("maturity", 0) < 1.0 and not d["is_approved"]
+    ]
     top_genetic = max((d["genetic_association"] for d in diseases), default=0)
 
     # Biology focus: shift from "does it work?" to "what's the nuance?" as evidence matures
