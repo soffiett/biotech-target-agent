@@ -113,18 +113,25 @@ def biology_node(state: TargetAssessmentState) -> dict:
     judge_critique = state.get("judge_critique")
     rerun_count = state.get("rerun_count", 0)
 
+    past_queries = state.get("bio_search_queries", [])
+
     if judge_critique and rerun_count > 0:
         issues = "\n".join(
             f"  - {i}" for i in judge_critique.get("biology_issues", []))
+        past_block = (
+            "\n## Searches Already Completed (DO NOT REPEAT)\n"
+            + "\n".join(f"  - {q}" for q in past_queries)
+            if past_queries else ""
+        )
         critique_section = (
             f"\n\n## Judge Critique — Previous Attempt Scored {judge_critique['biology_score']}/5\n"
             f"Specific issues identified:\n{issues}\n"
-            f"Required improvement: {judge_critique.get('top_improvement', '')}\n\n"
-            "Your previous biology findings are already recorded in state — do NOT repeat searches "
-            "you already ran. Focus exclusively on the gaps above."
+            f"Required improvement: {judge_critique.get('top_improvement', '')}\n"
+            f"{past_block}\n\n"
+            "Focus exclusively on the gaps above. Use different search queries from any listed above."
         )
         log.info(f"[{target}/{company}] Biology re-run (attempt {rerun_count + 1}) — "
-                 f"addressing judge critique")
+                 f"addressing judge critique, {len(past_queries)} past queries injected")
     else:
         critique_section = ""
 
@@ -144,7 +151,7 @@ def biology_node(state: TargetAssessmentState) -> dict:
         }
     ]
 
-    findings, errors = [], []
+    findings, errors, search_queries = [], [], []
     tool_call_count = 0
     log.info(f"[{target}/{company}] Biology agent started")
 
@@ -209,8 +216,11 @@ def biology_node(state: TargetAssessmentState) -> dict:
             for block in response.content:
                 if block.type == "tool_use":
                     tool_call_count += 1
+                    query_str = block.input.get("query", "")
                     log.debug(
-                        f"[{target}/{company}] Biology tool call: {block.name}({block.input.get('query', '')})")
+                        f"[{target}/{company}] Biology tool call: {block.name}({query_str})")
+                    if query_str:
+                        search_queries.append(f"[{block.name}] {query_str}")
                     result = _run_tool(block.name, block.input)
                     tool_results.append(
                         {"type": "tool_result", "tool_use_id": block.id, "content": result})
@@ -228,4 +238,5 @@ def biology_node(state: TargetAssessmentState) -> dict:
         "bio_findings": findings,
         "errors": errors,
         "rerun_count": rerun_count + 1,
+        "bio_search_queries": search_queries,
     }

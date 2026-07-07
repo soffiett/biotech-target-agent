@@ -22,8 +22,8 @@ class TargetAssessmentState(TypedDict):
 
     # Judge → biology re-run loop
     rerun_count: int          # incremented each time biology node runs; caps re-runs at 1
-    # set by judge when biology scores <= 2; injected into re-run
-    judge_critique: Optional[dict]
+    judge_critique: Optional[dict]  # set by judge when biology scores <= 2; injected into re-run
+    bio_search_queries: Annotated[list[str], operator.add]  # all queries biology ran (across runs)
 
 
 def make_initial_state(target: str, company: str, indication: str = "") -> TargetAssessmentState:
@@ -44,4 +44,5 @@ def make_initial_state(target: str, company: str, indication: str = "") -> Targe
         "quality_assessment": None,
         "rerun_count": 0,
         "judge_critique": None,
+        "bio_search_queries": [],
     }

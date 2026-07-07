@@ -45,7 +45,7 @@ raw_query = st.text_area(
 parsed: dict = {}
 if raw_query.strip():
     with st.spinner("Parsing query..."):
-        parsed = parse_query(raw_query)
+        parsed = parse_query(raw_query).model_dump()
 
     if parsed.get("confidence") == "low":
         st.caption("Some fields couldn't be inferred — please review below.")
