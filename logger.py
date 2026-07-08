@@ -7,9 +7,18 @@ Usage in any module:
     log.info("message")
     log.warning("message")
     log.error("message", exc_info=True)  # includes stack trace
+
+On ECS Fargate, CloudWatch captures all stderr output. The console handler is
+set to INFO in that environment so performance-relevant log lines (node timing,
+tool call counts, findings counts) appear in CloudWatch alongside warnings and
+errors. Locally it defaults to WARNING to keep the terminal clean.
+
+Set LOG_LEVEL=INFO in the container environment (already done in deploy.sh) to
+enable this without changing code between environments.
 """
 
 import logging
+import os
 import sys
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
@@ -20,6 +29,10 @@ LOG_FILE = LOG_DIR / "app.log"
 _FORMAT = "%(asctime)s | %(levelname)-8s | %(name)-30s | %(message)s"
 _DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
 _configured = False
+
+# On Fargate, LOG_LEVEL=INFO is set via ECS task definition environment variable.
+# Locally, falls back to WARNING to keep the terminal clean.
+_CONSOLE_LEVEL = getattr(logging, os.environ.get("LOG_LEVEL", "WARNING").upper(), logging.WARNING)
 
 
 def _configure() -> None:
@@ -37,9 +50,10 @@ def _configure() -> None:
     fh.setLevel(logging.DEBUG)
     fh.setFormatter(logging.Formatter(_FORMAT, datefmt=_DATE_FORMAT))
 
-    # Console handler — WARNING and above only (keeps CLI clean)
+    # Console handler — level controlled by LOG_LEVEL env var.
+    # INFO on Fargate (CloudWatch performance monitoring); WARNING locally.
     ch = logging.StreamHandler(sys.stderr)
-    ch.setLevel(logging.WARNING)
+    ch.setLevel(_CONSOLE_LEVEL)
     ch.setFormatter(logging.Formatter(_FORMAT, datefmt=_DATE_FORMAT))
 
     root.addHandler(fh)
@@ -50,6 +64,5 @@ def _configure() -> None:
 def get_logger(name: str) -> logging.Logger:
     """Return a named logger under the 'biotech' root logger."""
     _configure()
-    # Strip leading module path noise — e.g. 'graph.nodes.biology' → 'nodes.biology'
     short_name = name.replace("graph.nodes.", "nodes.").replace("tools.", "tools.")
     return logging.getLogger(f"biotech.{short_name}")

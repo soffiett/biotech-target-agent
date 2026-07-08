@@ -90,6 +90,9 @@ TASK_DEF=$(cat << EOF
       "containerPort": 8501,
       "protocol": "tcp"
     }],
+    "environment": [
+      {"name": "LOG_LEVEL", "value": "INFO"}
+    ],
     "secrets": [
       {"name": "ANTHROPIC_API_KEY", "valueFrom": "$ANTHROPIC_ARN"},
       {"name": "TAVILY_API_KEY",    "valueFrom": "$TAVILY_ARN"},
