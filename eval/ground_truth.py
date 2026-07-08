@@ -83,6 +83,72 @@ TEST_CASES = [
         "rationale": "Early Phase 1 only, limited efficacy data, biology not fully understood",
         "source": "ClinicalTrials.gov",
     },
+    # ── Additional Strong cases (different modalities / pathways) ─────────────
+    {
+        "target": "PCSK9",
+        "company": "Amgen",
+        "indication": "hypercholesterolemia",
+        "expected_recommendation": "Strong",
+        "confidence_min": 7.5,
+        "rationale": (
+            "FDA approved (evolocumab / Repatha, 2015); FOURIER trial showed 15% reduction "
+            "in CV events; strong human genetic validation (LOF variants → low LDL, no adverse effects)"
+        ),
+        "source": "FDA Purple Book; NEJM 2017 FOURIER trial",
+    },
+    {
+        "target": "IL-17A",
+        "company": "Novartis",
+        "indication": "plaque psoriasis",
+        "expected_recommendation": "Strong",
+        "confidence_min": 7.5,
+        "rationale": (
+            "FDA approved (secukinumab / Cosentyx, 2015); CLEAR trial PASI-90 ~79% vs ~44% ustekinumab; "
+            "class validated by ixekizumab (Eli Lilly, 2016) and bimekizumab"
+        ),
+        "source": "FDA Purple Book; NEJM 2015",
+    },
+    # ── Moderate case — approved but modest efficacy / narrow label ───────────
+    {
+        "target": "BAFF",
+        "company": "GSK",
+        "indication": "systemic lupus erythematosus",
+        "expected_recommendation": "Moderate",
+        "confidence_min": 4.0,
+        "confidence_max": 7.0,
+        "rationale": (
+            "FDA approved (belimumab / Benlysta, 2011) but modest clinical benefit — SRI-4 response ~57% vs "
+            "43% placebo; two large Phase 3 trials required; narrow label (active, autoantibody-positive SLE); "
+            "target is validated but differentiation from standard-of-care is limited"
+        ),
+        "source": "FDA Purple Book; Lancet 2011 BLISS-52/BLISS-76",
+    },
+    # ── Against cases — documented Phase 2/3 failures ────────────────────────
+    {
+        "target": "BACE1",
+        "company": "Merck",
+        "indication": "Alzheimer's disease",
+        "expected_recommendation": "Against",
+        "confidence_max": 4.0,
+        "rationale": (
+            "Verubecestat (MK-8931) Phase 2/3 EPOCH trial stopped early 2018 — futility plus "
+            "cognitive worsening signal; class-wide failure (atabecestat, lanabecestat also failed); "
+            "amyloid lowering not sufficient for clinical benefit; target mechanism now widely questioned"
+        ),
+        "source": "NEJM 2019; Merck press release Feb 2018",
+    },
+    {
+        "target": "EGFRvIII",
+        "company": "Celldex",
+        "indication": "glioblastoma",
+        "expected_recommendation": "Against",
+        "confidence_max": 4.0,
+        "rationale": (
+            "Rindopepimut Phase 3 ACT IV trial stopped at interim analysis 2016 — met futility criteria, "
+            "no OS benefit over standard-of-care; antigen loss on recurrence is a fundamental escape mechanism"
+        ),
+        "source": "JAMA 2017 ACT IV trial results",
+    },
 ]
 
 RECOMMENDATION_ORDER = ["Against", "Weak", "Moderate", "Strong"]
