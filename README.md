@@ -115,18 +115,30 @@ The `eval/` module tests agent quality at development time — run it after chan
 
 ```
 eval/
-├── ground_truth.py       # 8 curated test cases (FDA approvals + documented Phase 3 failures)
+├── ground_truth.py       # 13 curated test cases with defensible ground truth
 ├── llm_judge.py          # Section-by-section rubric scoring using Sonnet
 ├── consistency_check.py  # Runs agent twice, flags low-reliability outputs
+├── rag_eval.py           # Retrieval-only eval: source routing, relevance, coverage, chunk integrity
 └── runner.py             # Smart routing: L1 + L2 for known targets, consistency + L2 for novel
 ```
+
+**Ground truth dataset — 13 targets across all four recommendation tiers:**
+
+| Tier | Count | Examples |
+|------|-------|---------|
+| Strong | 7 | PD-L1, IL-6R, VEGF, HER2, TROP2, PCSK9, IL-17A |
+| Moderate | 1 | BAFF (approved but modest efficacy, narrow label) |
+| Weak | 1 | VISTA (Phase 1 only, limited data) |
+| Against | 4 | TIGIT, CD28, BACE1, EGFRvIII |
+
+Sources: FDA Purple Book (approvals), published Phase 3 trial results (NEJM, JAMA, Lancet).
 
 **Routing logic:**
 - **Known target** (in ground truth DB) → Level 1 ground truth score → Level 2 LLM judge on failure
 - **Novel target** (no ground truth) → Consistency check (run twice) → Level 2 LLM judge
 
 ```bash
-# Run full test suite (all 8 ground truth cases)
+# Run full test suite (all 13 ground truth cases)
 python -m eval.runner
 
 # Evaluate a specific known target
@@ -134,9 +146,11 @@ python -m eval.runner --target TIGIT --company Roche --indication NSCLC
 
 # Evaluate a novel target (auto-routes to consistency + judge)
 python -m eval.runner --target VISTA --company ImmuNext --indication "solid tumors"
-```
 
-**Ground truth sources:** FDA Purple Book (approved biologics), published Phase 3 trial results.
+# Run RAG retrieval eval (no LLM calls, completes in ~3s)
+python -m eval.rag_eval
+python -m eval.rag_eval --verbose
+```
 
 ---
 
@@ -262,15 +276,16 @@ The ChromaDB knowledge base is built automatically on first launch. The `BAAI/bg
 
 ## Example Queries
 
-These work well as test cases since ground truth is known:
+A cross-section of the ground truth dataset — useful for quick manual testing:
 
 | Target | Company | Indication | Expected |
 |--------|---------|------------|----------|
-| PD-L1 | Genentech | NSCLC | Strong (approved) |
-| IL-6R | Roche | Rheumatoid arthritis | Strong (approved) |
-| HER2 | Genentech | Breast cancer | Strong (approved) |
-| TROP2 | Gilead | Triple-negative breast cancer | Strong (approved ADC) |
-| TIGIT | Roche | NSCLC | Against (Phase 3 failed 2023) |
+| PD-L1 | Genentech | NSCLC | Strong |
+| PCSK9 | Amgen | Hypercholesterolemia | Strong |
+| BAFF | GSK | Systemic lupus erythematosus | Moderate |
+| VISTA | ImmuNext | Solid tumors | Weak |
+| TIGIT | Roche | NSCLC | Against |
+| BACE1 | Merck | Alzheimer's disease | Against |
 
 ---
 
@@ -303,9 +318,10 @@ biotech-target-agent/
 │   ├── ingestion.py              # Markdown → chunks → embeddings
 │   └── data/                     # Curated biotech knowledge documents
 ├── eval/
-│   ├── ground_truth.py           # Curated test cases + L1 scoring
+│   ├── ground_truth.py           # 13 curated test cases + L1 scoring
 │   ├── llm_judge.py              # Section rubric scoring (L2)
 │   ├── consistency_check.py      # Reliability check for novel targets
+│   ├── rag_eval.py               # RAG retrieval eval (no LLM calls)
 │   └── runner.py                 # Evaluation orchestrator
 ├── models/
 │   └── schemas.py                # Pydantic output models
