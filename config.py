@@ -22,6 +22,10 @@ EVAL_JUDGE_MODEL = "claude-sonnet-4-6"  # stronger model for reliable judging
 EVAL_JUDGE_MAX_TOKENS = 4096            # needs room to score all 6 sections with reasoning
 CONSISTENCY_RUNS = 2                    # how many times to run agent for consistency check
 
+# ── Follow-up Q&A ─────────────────────────────────────────────────────────────
+FOLLOWUP_MODEL = "claude-sonnet-4-6"   # Sonnet for grounding quality and safe refusals
+FOLLOWUP_MAX_TOKENS = 1024
+
 # ── System prompts ────────────────────────────────────────────────────────────
 
 BIOLOGY_SYSTEM_PROMPT = """You are a computational biologist and drug discovery scientist specializing in biologics.

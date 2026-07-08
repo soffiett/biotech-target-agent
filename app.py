@@ -8,6 +8,7 @@ from graph.orchestrator import graph
 from graph.state import make_initial_state
 from rag.ingestion import ingest_static_documents
 from tools.query_parser import parse_query
+from tools.followup import ask_followup
 
 st.set_page_config(
     page_title="Biotech Target Assessor",
@@ -28,6 +29,9 @@ def init_rag() -> None:
 
 
 init_rag()
+
+st.session_state.setdefault("assessment", None)
+st.session_state.setdefault("followup_history", [])
 
 # ── Input ───────────────────────────────────────────────────────────────────
 st.write("Describe the target in your own words, or fill in the fields directly.")
@@ -68,22 +72,22 @@ if submitted and not (target and company):
 
 # ── Run assessment ───────────────────────────────────────────────────────────
 if submitted and target and company:
-    initial_state = make_initial_state(target, company, indication)
+    # Clear prior session so report and follow-up start fresh
+    st.session_state["followup_history"] = []
+    st.session_state["assessment"] = None
 
-    # Accumulate final state from streaming events
+    initial_state = make_initial_state(target, company, indication)
     result = dict(initial_state)
 
     with st.status("Running multi-agent assessment...", expanded=True) as status:
         for event in graph.stream(initial_state, stream_mode="updates"):
             for node_name, update in event.items():
-                # Merge update into result (operator.add lists must be appended)
                 for key, val in update.items():
                     if key in ("bio_findings", "trial_findings", "errors") and isinstance(val, list):
                         result[key] = result.get(key, []) + val
                     else:
                         result[key] = val
 
-                # Per-node status messages
                 if node_name == "prefetch":
                     ot = update.get("prefetch_context", {}).get("opentargets", {})
                     n_drugs = len(ot.get("known_drugs", []))
@@ -92,7 +96,6 @@ if submitted and target and company:
                         f"Prefetch: OpenTargets returned {n_drugs} clinical candidate(s), "
                         f"{n_diseases} disease association(s) — research focus set"
                     )
-
                 elif node_name == "biology":
                     rc = update.get("rerun_count", 1)
                     if rc > 1:
@@ -105,17 +108,14 @@ if submitted and target and company:
                     else:
                         n = len(update.get("bio_findings", []))
                         st.write(f"Biology agent: {n} finding(s) from PubMed, bioRxiv, web")
-
                 elif node_name == "clinical_trials":
                     n = len(update.get("trial_findings", []))
                     st.write(f"Clinical trial agent: {n} finding(s) from ClinicalTrials.gov")
-
                 elif node_name == "synthesis":
                     rep = update.get("report") or {}
                     rec = rep.get("recommendation", "")
                     score = rep.get("confidence_score", "")
                     st.write(f"Synthesis complete — {rec}, confidence {score}/10")
-
                 elif node_name == "judge":
                     qa = update.get("quality_assessment") or {}
                     overall = qa.get("overall_quality", "?")
@@ -130,13 +130,30 @@ if submitted and target and company:
 
         status.update(label="Assessment complete", state="complete")
 
-    report = result.get("report", {})
-    errors = result.get("errors", [])
-    quality = result.get("quality_assessment", {})
-
-    if not report:
+    if not result.get("report"):
         st.error("No report was generated. Check your API keys and try again.")
         st.stop()
+
+    # Persist to session state — report display and follow-up panel read from
+    # here on every subsequent Streamlit re-run (e.g. chat input submissions).
+    st.session_state["assessment"] = {
+        "report":    result.get("report", {}),
+        "errors":    result.get("errors", []),
+        "quality":   result.get("quality_assessment", {}),
+        "target":    target,
+        "company":   company,
+        "indication": indication,
+    }
+
+# ── Report display and follow-up (persists across chat re-runs) ──────────────
+if st.session_state.get("assessment"):
+    a = st.session_state["assessment"]
+    report    = a["report"]
+    errors    = a["errors"]
+    quality   = a["quality"]
+    target    = a["target"]
+    company   = a["company"]
+    indication = a["indication"]
 
     # ── Report header ────────────────────────────────────────────────────────
     st.divider()
@@ -144,7 +161,6 @@ if submitted and target and company:
 
     score = report.get("confidence_score", 0)
     rec = report.get("recommendation", "N/A")
-    rec_color = {"Strong": "green", "Moderate": "blue", "Weak": "orange", "Against": "red"}.get(rec, "gray")
 
     col1, col2, col3 = st.columns(3)
     col1.metric("Confidence Score", f"{score:.1f} / 10")
@@ -156,17 +172,14 @@ if submitted and target and company:
     # ── Report quality panel ─────────────────────────────────────────────────
     if quality and "error" not in quality:
         overall_q = quality.get("overall_quality", 0)
-        q_color = "green" if overall_q >= 4 else "orange" if overall_q >= 3 else "red"
         q_label = {5: "Excellent", 4: "Good", 3: "Adequate", 2: "Weak", 1: "Poor"}.get(overall_q, "")
 
         with st.expander(f"Report Quality: {overall_q}/5 — {q_label}", expanded=False):
             qcol1, qcol2 = st.columns(2)
             qcol1.metric("Strongest section", quality.get("strongest_section", "—"))
             qcol2.metric("Weakest section", quality.get("weakest_section", "—"))
-
             st.caption("Top improvement:")
             st.warning(quality.get("top_improvement", ""))
-
             st.caption("Section scores:")
             for s in quality.get("section_scores", []):
                 score_bar = "█" * s["score"] + "░" * (5 - s["score"])
@@ -177,20 +190,15 @@ if submitted and target and company:
     # ── Detailed sections ────────────────────────────────────────────────────
     with st.expander("Biology Rationale", expanded=True):
         st.write(report.get("biology_rationale", ""))
-
     with st.expander("Large Molecule Druggability"):
         st.write(report.get("druggability_assessment", ""))
-
     with st.expander("Clinical Precedent"):
         st.write(report.get("clinical_precedent", ""))
-
     with st.expander("Competitive Landscape"):
         st.write(report.get("competitive_landscape", ""))
-
     with st.expander("Key Risks"):
         for risk in report.get("key_risks", []):
             st.warning(risk)
-
     with st.expander("Confidence Score Reasoning"):
         st.write(report.get("confidence_reasoning", ""))
 
@@ -198,3 +206,32 @@ if submitted and target and company:
         with st.expander("Warnings / Errors"):
             for err in errors:
                 st.error(err)
+
+    # ── Follow-up Q&A ────────────────────────────────────────────────────────
+    st.divider()
+    st.subheader("Ask a Follow-up")
+    st.caption(
+        "Answers are grounded in this assessment report only — not medical or investment advice."
+    )
+
+    history = st.session_state.setdefault("followup_history", [])
+
+    for msg in history:
+        st.chat_message(msg["role"]).write(msg["content"])
+
+    question = st.chat_input("Ask a question about this report...")
+    if question:
+        st.chat_message("user").write(question)
+        with st.chat_message("assistant"):
+            with st.spinner("Thinking..."):
+                answer = ask_followup(
+                    question=question,
+                    report=report,
+                    target=target,
+                    company=company,
+                    indication=indication,
+                    history=history,
+                )
+            st.write(answer)
+        history.append({"role": "user", "content": question})
+        history.append({"role": "assistant", "content": answer})
