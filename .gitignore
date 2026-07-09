@@ -12,3 +12,4 @@ build/
 .pytest_cache/
 logs/
 deploy/.aws-config
+observability/runs.jsonl

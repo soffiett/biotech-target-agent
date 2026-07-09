@@ -6,9 +6,11 @@ against a structured rubric. Triggered automatically on Level 1 failures
 and run standalone for novel targets with no ground truth.
 """
 
+import time
 import anthropic
 from config import EVAL_JUDGE_MODEL, EVAL_JUDGE_MAX_TOKENS
 from logger import get_logger
+from observability.tracker import get_tracker
 
 log = get_logger(__name__)
 
@@ -131,6 +133,7 @@ def judge_report(report: dict, target: str, company: str) -> dict:
         + "\n\nScore each section 1–5 and provide your overall quality assessment."
     )
 
+    _t0 = time.perf_counter()
     response = _client.messages.create(
         model=EVAL_JUDGE_MODEL,
         max_tokens=EVAL_JUDGE_MAX_TOKENS,
@@ -139,6 +142,17 @@ def judge_report(report: dict, target: str, company: str) -> dict:
         tool_choice={"type": "tool", "name": "submit_section_scores"},
         messages=[{"role": "user", "content": user_message}],
     )
+    _latency = time.perf_counter() - _t0
+
+    tracker = get_tracker()
+    if tracker:
+        tracker.record_node(
+            "judge",
+            model=EVAL_JUDGE_MODEL,
+            input_tokens=response.usage.input_tokens,
+            output_tokens=response.usage.output_tokens,
+            latency_s=_latency,
+        )
 
     for block in response.content:
         if block.type == "tool_use" and block.name == "submit_section_scores":

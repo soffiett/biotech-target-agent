@@ -13,6 +13,7 @@ from config import (
 )
 from models.schemas import BiologyFinding
 from logger import get_logger
+from observability.tracker import get_tracker
 
 log = get_logger(__name__)
 
@@ -153,6 +154,8 @@ def biology_node(state: TargetAssessmentState) -> dict:
 
     findings, errors, search_queries = [], [], []
     tool_call_count = 0
+    total_input_tokens = total_output_tokens = 0
+    _t0 = time.perf_counter()
     log.info(f"[{target}/{company}] Biology agent started")
 
     for iteration in range(MAX_TOOL_ITERATIONS):
@@ -177,6 +180,8 @@ def biology_node(state: TargetAssessmentState) -> dict:
             break
 
         messages.append({"role": "assistant", "content": response.content})
+        total_input_tokens  += response.usage.input_tokens
+        total_output_tokens += response.usage.output_tokens
 
         # --- NEW: handle truncation explicitly ---
         if response.stop_reason == "max_tokens":
@@ -233,6 +238,18 @@ def biology_node(state: TargetAssessmentState) -> dict:
         errors.append(
             f"Biology agent ended on unexpected stop_reason: {response.stop_reason}")
         break
+
+    tracker = get_tracker()
+    if tracker:
+        tracker.record_node(
+            "biology",
+            model=SEARCH_MODEL,
+            input_tokens=total_input_tokens,
+            output_tokens=total_output_tokens,
+            latency_s=time.perf_counter() - _t0,
+            tool_calls=tool_call_count,
+            error=bool(errors),
+        )
 
     return {
         "bio_findings": findings,

@@ -6,9 +6,11 @@ The report is injected into the system prompt; conversation history is managed
 by the caller (st.session_state in app.py).
 """
 
+import time
 import anthropic
 from config import FOLLOWUP_MODEL, FOLLOWUP_MAX_TOKENS
 from logger import get_logger
+from observability.tracker import get_tracker
 
 log = get_logger(__name__)
 
@@ -101,16 +103,27 @@ def ask_followup(
 
     log.info(f"[{target}/{company}] Follow-up question (turn {len(history) // 2 + 1})")
 
+    _t0 = time.perf_counter()
     response = _client.messages.create(
         model=FOLLOWUP_MODEL,
         max_tokens=FOLLOWUP_MAX_TOKENS,
         system=system,
         messages=messages,
     )
+    _latency = time.perf_counter() - _t0
 
     answer = response.content[0].text if response.content else (
         "I was unable to generate a response. Please try rephrasing your question."
     )
+
+    tracker = get_tracker()
+    if tracker:
+        tracker.record_followup(
+            model=FOLLOWUP_MODEL,
+            input_tokens=response.usage.input_tokens,
+            output_tokens=response.usage.output_tokens,
+            latency_s=_latency,
+        )
 
     log.info(f"[{target}/{company}] Follow-up answered — {response.usage.output_tokens} tokens")
     return answer

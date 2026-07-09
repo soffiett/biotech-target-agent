@@ -12,6 +12,7 @@ from config import (
     CLINICAL_TRIALS_SYSTEM_PROMPT,
 )
 from models.schemas import TrialFinding
+from observability.tracker import get_tracker
 
 _client = anthropic.Anthropic()
 
@@ -108,6 +109,8 @@ def clinical_trials_node(state: TargetAssessmentState) -> dict:
 
     findings, errors = [], []
     tool_call_count = 0
+    total_input_tokens = total_output_tokens = 0
+    _t0 = time.perf_counter()
     log = get_logger(__name__)
     log.info(f"[{target}/{company}] Clinical trials agent started")
 
@@ -132,6 +135,8 @@ def clinical_trials_node(state: TargetAssessmentState) -> dict:
             break
 
         messages.append({"role": "assistant", "content": response.content})
+        total_input_tokens  += response.usage.input_tokens
+        total_output_tokens += response.usage.output_tokens
 
         if response.stop_reason == "max_tokens":
             log.warning(
@@ -175,5 +180,17 @@ def clinical_trials_node(state: TargetAssessmentState) -> dict:
         errors.append(
             f"Clinical trials agent ended on unexpected stop_reason: {response.stop_reason}")
         break
+
+    tracker = get_tracker()
+    if tracker:
+        tracker.record_node(
+            "clinical_trials",
+            model=SEARCH_MODEL,
+            input_tokens=total_input_tokens,
+            output_tokens=total_output_tokens,
+            latency_s=time.perf_counter() - _t0,
+            tool_calls=tool_call_count,
+            error=bool(errors),
+        )
 
     return {"trial_findings": findings, "errors": errors}

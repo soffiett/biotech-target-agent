@@ -9,6 +9,7 @@ from graph.state import make_initial_state
 from rag.ingestion import ingest_static_documents
 from tools.query_parser import parse_query
 from tools.followup import ask_followup
+from observability.tracker import start_run
 
 st.set_page_config(
     page_title="Biotech Target Assessor",
@@ -76,6 +77,7 @@ if submitted and target and company:
     st.session_state["followup_history"] = []
     st.session_state["assessment"] = None
 
+    tracker = start_run(target, company, indication)
     initial_state = make_initial_state(target, company, indication)
     result = dict(initial_state)
 
@@ -133,6 +135,9 @@ if submitted and target and company:
     if not result.get("report"):
         st.error("No report was generated. Check your API keys and try again.")
         st.stop()
+
+    tracker.finalize(result.get("report", {}))
+    tracker.save()
 
     # Persist to session state — report display and follow-up panel read from
     # here on every subsequent Streamlit re-run (e.g. chat input submissions).

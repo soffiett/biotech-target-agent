@@ -1,4 +1,5 @@
 import copy
+import time
 import anthropic
 from pydantic import ValidationError
 from rag.vectorstore import query_knowledge_base
@@ -11,6 +12,7 @@ from config import (
     SYNTHESIS_SYSTEM_PROMPT,
 )
 from logger import get_logger
+from observability.tracker import get_tracker
 
 log = get_logger(__name__)
 
@@ -87,17 +89,18 @@ def synthesis_node(state: TargetAssessmentState) -> dict:
 
     user_message = f"""Synthesize the following research to assess: **{target}** (Company: {company})
 
-## Biology Research
-{bio_context}
+                    ## Biology Research
+                    {bio_context}
 
-## Clinical Trial Landscape
-{trial_context}
+                    ## Clinical Trial Landscape
+                    {trial_context}
 
-## Knowledge Base: Target Validation Frameworks
-{rag_context}
+                    ## Knowledge Base: Target Validation Frameworks
+                    {rag_context}
 
-Now create the structured assessment report."""
+                    Now create the structured assessment report."""
 
+    _t0 = time.perf_counter()
     response = _client.messages.create(
         model=SYNTHESIS_MODEL,
         max_tokens=SYNTHESIS_MAX_TOKENS,
@@ -106,6 +109,7 @@ Now create the structured assessment report."""
         tool_choice={"type": "tool", "name": "create_assessment_report"},
         messages=[{"role": "user", "content": user_message}],
     )
+    _latency = time.perf_counter() - _t0
 
     if response.stop_reason == "max_tokens":
         log.error(
@@ -143,5 +147,16 @@ Now create the structured assessment report."""
 
     if not report:
         log.error(f"[{target}/{company}] Synthesis failed — no report returned")
+
+    tracker = get_tracker()
+    if tracker:
+        tracker.record_node(
+            "synthesis",
+            model=SYNTHESIS_MODEL,
+            input_tokens=response.usage.input_tokens,
+            output_tokens=response.usage.output_tokens,
+            latency_s=_latency,
+            error=not report,
+        )
 
     return {"report": report}
