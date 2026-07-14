@@ -4,6 +4,10 @@ from rag.vectorstore import add_documents, is_populated
 
 DATA_DIR = Path(__file__).parent / "data"
 
+# Files injected directly into prompts — excluded from ChromaDB to avoid
+# polluting retrieval with synthesis-specific instructions.
+_PROMPT_INJECTED = {"synthesis_skill.md"}
+
 
 def ingest_static_documents() -> None:
     """Load curated markdown files into ChromaDB. No-op if already populated."""
@@ -13,6 +17,8 @@ def ingest_static_documents() -> None:
     texts, metadatas, ids = [], [], []
 
     for md_file in sorted(DATA_DIR.glob("*.md")):
+        if md_file.name in _PROMPT_INJECTED:
+            continue
         content = md_file.read_text(encoding="utf-8")
         for i, chunk in enumerate(_chunk_markdown(content)):
             if len(chunk.strip()) < 50:
@@ -24,7 +30,8 @@ def ingest_static_documents() -> None:
 
     if texts:
         add_documents(texts, metadatas, ids)
-        print(f"[RAG] Ingested {len(texts)} chunks from {len(list(DATA_DIR.glob('*.md')))} files")
+        n_files = len([f for f in DATA_DIR.glob("*.md") if f.name not in _PROMPT_INJECTED])
+        print(f"[RAG] Ingested {len(texts)} chunks from {n_files} files")
 
 
 def _chunk_markdown(content: str, max_chars: int = 900) -> list[str]:

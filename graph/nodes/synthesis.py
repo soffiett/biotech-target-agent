@@ -1,5 +1,6 @@
 import copy
 import time
+from pathlib import Path
 import anthropic
 from pydantic import ValidationError
 from rag.vectorstore import query_knowledge_base
@@ -17,6 +18,11 @@ from observability.tracker import get_tracker
 log = get_logger(__name__)
 
 _client = anthropic.Anthropic()
+
+# Loaded once at import time — injected into every synthesis call so the agent
+# always knows the section-by-section writing standard it is being evaluated against.
+_SKILL_PATH = Path(__file__).parent.parent.parent / "rag" / "data" / "synthesis_skill.md"
+_SYNTHESIS_SKILL = _SKILL_PATH.read_text(encoding="utf-8") if _SKILL_PATH.exists() else ""
 
 
 def _resolve_refs(schema: dict) -> dict:
@@ -87,18 +93,21 @@ def synthesis_node(state: TargetAssessmentState) -> dict:
         f["content"] for f in trial_findings if f.get("content")
     ) or "No clinical trial findings available."
 
+    skill_block = f"\n\n## Report Writing Standard\n{_SYNTHESIS_SKILL}" if _SYNTHESIS_SKILL else ""
+
     user_message = f"""Synthesize the following research to assess: **{target}** (Company: {company})
 
-                    ## Biology Research
-                    {bio_context}
+## Biology Research
+{bio_context}
 
-                    ## Clinical Trial Landscape
-                    {trial_context}
+## Clinical Trial Landscape
+{trial_context}
+{skill_block}
 
-                    ## Knowledge Base: Target Validation Frameworks
-                    {rag_context}
+## Knowledge Base: Target Validation Frameworks
+{rag_context}
 
-                    Now create the structured assessment report."""
+Now create the structured assessment report. Follow the Report Writing Standard above for every section."""
 
     _t0 = time.perf_counter()
     response = _client.messages.create(
