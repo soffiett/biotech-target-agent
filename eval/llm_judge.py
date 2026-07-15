@@ -151,7 +151,15 @@ def judge_report(report: dict, target: str, company: str) -> dict:
     """
     section_scores = []
     for section, criteria in RUBRIC.items():
-        content = report.get(section, "")
+        if section == "confidence_score":
+            # confidence_score is an integer; the reasoning lives in a separate field.
+            # Combine both so the judge can evaluate calibration against the stated rationale.
+            content = (
+                f"Score: {report.get('confidence_score', 'N/A')}/10\n"
+                f"Reasoning: {report.get('confidence_reasoning', '(no reasoning provided)')}"
+            )
+        else:
+            content = report.get(section, "")
         if isinstance(content, list):
             content = "\n".join(f"- {item}" for item in content)
         result = _score_section(section, content, criteria, target, company)
