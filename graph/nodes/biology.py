@@ -84,6 +84,18 @@ def _run_tool(name: str, inputs: dict) -> str:
     return json.dumps({"error": "unknown tool"})
 
 
+def _trim_tool_result(result: str, max_chars: int = 4000) -> str:
+    """
+    Truncate a tool result before it enters the message history.
+    Each search returns up to 5 results as JSON — without trimming, 5 iterations
+    × 5 results × ~400 chars each = ~10k chars of accumulated context, leaving
+    little room for the model to generate its final summary.
+    """
+    if len(result) <= max_chars:
+        return result
+    return result[:max_chars] + f"\n... [truncated at {max_chars} chars to limit context size]"
+
+
 def _harvest_text(content) -> list[dict]:
     """Pull any non-empty text blocks into validated BiologyFinding dicts."""
     out = []
@@ -226,7 +238,7 @@ def biology_node(state: TargetAssessmentState) -> dict:
                         f"[{target}/{company}] Biology tool call: {block.name}({query_str})")
                     if query_str:
                         search_queries.append(f"[{block.name}] {query_str}")
-                    result = _run_tool(block.name, block.input)
+                    result = _trim_tool_result(_run_tool(block.name, block.input))
                     tool_results.append(
                         {"type": "tool_result", "tool_use_id": block.id, "content": result})
             messages.append({"role": "user", "content": tool_results})

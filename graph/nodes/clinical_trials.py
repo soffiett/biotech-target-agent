@@ -65,6 +65,12 @@ def _run_tool(name: str, inputs: dict) -> str:
     return json.dumps({"error": "unknown tool"})
 
 
+def _trim_tool_result(result: str, max_chars: int = 4000) -> str:
+    if len(result) <= max_chars:
+        return result
+    return result[:max_chars] + f"\n... [truncated at {max_chars} chars to limit context size]"
+
+
 def _harvest_text(content) -> list[dict]:
     """Pull any non-empty text blocks into validated TrialFinding dicts."""
     out = []
@@ -170,7 +176,7 @@ def clinical_trials_node(state: TargetAssessmentState) -> dict:
                 if block.type == "tool_use":
                     tool_call_count += 1
                     log.debug(f"[{target}/{company}] Trial tool call: {block.name}({block.input.get('query', '')})")
-                    result = _run_tool(block.name, block.input)
+                    result = _trim_tool_result(_run_tool(block.name, block.input))
                     tool_results.append({"type": "tool_result", "tool_use_id": block.id, "content": result})
             messages.append({"role": "user", "content": tool_results})
             continue

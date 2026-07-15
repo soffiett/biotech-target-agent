@@ -6,7 +6,7 @@ SEARCH_MODEL = "claude-haiku-4-5"
 SYNTHESIS_MODEL = "claude-sonnet-4-6"
 
 # ── Token limits ──────────────────────────────────────────────────────────────
-SEARCH_MAX_TOKENS = 2048
+SEARCH_MAX_TOKENS = 4096
 SYNTHESIS_MAX_TOKENS = 4096
 PARSER_MAX_TOKENS = 256
 
