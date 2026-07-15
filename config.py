@@ -19,7 +19,8 @@ RAG_TOP_K = 4  # number of chunks retrieved for synthesis context
 
 # ── Evaluation ────────────────────────────────────────────────────────────────
 EVAL_JUDGE_MODEL = "claude-sonnet-4-6"  # stronger model for reliable judging
-EVAL_JUDGE_MAX_TOKENS = 4096            # needs room to score all 6 sections with reasoning
+# max_tokens per section is hardcoded to 512 in llm_judge.py — one call per section,
+# so 512 is ample and the old 4096 all-at-once budget is no longer needed here
 CONSISTENCY_RUNS = 2                    # how many times to run agent for consistency check
 
 # ── Follow-up Q&A ─────────────────────────────────────────────────────────────

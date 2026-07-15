@@ -70,6 +70,29 @@ REPORT_TOOL = {
 }
 
 
+# Sections with prose content and their target word limits from synthesis_skill.md
+_SECTION_WORD_LIMITS = {
+    "biology_rationale": 200,
+    "druggability_assessment": 150,
+    "clinical_precedent": 200,
+    "competitive_landscape": 150,
+    "confidence_reasoning": 100,
+}
+
+
+def _warn_verbose_sections(report: dict, target: str, company: str) -> None:
+    for section, limit in _SECTION_WORD_LIMITS.items():
+        content = report.get(section, "")
+        if not isinstance(content, str):
+            continue
+        word_count = len(content.split())
+        if word_count > limit:
+            log.warning(
+                f"[{target}/{company}] Section '{section}' is {word_count} words "
+                f"(limit {limit}) — synthesis may be too verbose; judge input will be large"
+            )
+
+
 def synthesis_node(state: TargetAssessmentState) -> dict:
     target = state["target"]
     company = state["company"]
@@ -156,6 +179,8 @@ Now create the structured assessment report. Follow the Report Writing Standard 
 
     if not report:
         log.error(f"[{target}/{company}] Synthesis failed — no report returned")
+    else:
+        _warn_verbose_sections(report, target, company)
 
     tracker = get_tracker()
     if tracker:

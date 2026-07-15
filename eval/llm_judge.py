@@ -61,85 +61,62 @@ RUBRIC = {
     ),
 }
 
-_JUDGE_TOOL = {
-    "name": "submit_section_scores",
-    "description": "Submit scores for all report sections.",
+_SECTION_TOOL = {
+    "name": "submit_section_score",
+    "description": "Submit score for one report section.",
     "input_schema": {
         "type": "object",
         "properties": {
-            "section_scores": {
-                "type": "array",
-                "items": {
-                    "type": "object",
-                    "properties": {
-                        "section": {"type": "string"},
-                        "score": {
-                            "type": "integer",
-                            "description": "1–5 (1=poor, 3=adequate, 5=excellent)",
-                        },
-                        "reasoning": {"type": "string"},
-                        "issues": {
-                            "type": "array",
-                            "items": {"type": "string"},
-                            "description": "Specific problems found, if any.",
-                        },
-                    },
-                    "required": ["section", "score", "reasoning", "issues"],
-                },
-            },
-            "overall_quality": {
+            "score": {
                 "type": "integer",
-                "description": "Overall report quality 1–5.",
+                "description": "1–5 (1=poor, 3=adequate, 5=excellent)",
             },
-            "strongest_section": {"type": "string"},
-            "weakest_section": {"type": "string"},
-            "top_improvement": {
+            "reasoning": {
                 "type": "string",
-                "description": "The single most important thing to improve.",
+                "description": "One or two sentences explaining the score.",
+            },
+            "issues": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "Specific problems found, if any. Empty list if none.",
             },
         },
-        "required": ["section_scores", "overall_quality", "strongest_section", "weakest_section", "top_improvement"],
+        "required": ["score", "reasoning", "issues"],
     },
 }
 
 _SYSTEM = (
-    "You are an expert drug discovery analyst evaluating the quality of a drug target assessment report. "
-    "Score each section rigorously against the rubric. Be critical — a score of 5 means the section is "
-    "genuinely excellent, not just adequate. A score of 3 means adequate but with clear gaps. "
-    "Be specific in your reasoning and issues."
+    "You are an expert drug discovery analyst evaluating one section of a drug target assessment report. "
+    "Score it rigorously against the rubric. Be critical — 5 means genuinely excellent, "
+    "3 means adequate with clear gaps, 1 means the section fails its purpose. "
+    "Keep your reasoning to 1–2 sentences. List only real, specific issues."
 )
 
 
-def judge_report(report: dict, target: str, company: str) -> dict:
+def _score_section(
+    section: str,
+    content: str,
+    criteria: str,
+    target: str,
+    company: str,
+) -> dict:
     """
-    Run LLM-as-judge evaluation on a single report.
-    Returns structured scores per section plus overall quality assessment.
+    Score a single report section with its own API call.
+    One call per section keeps each prompt small and avoids max_tokens truncation.
     """
-    # Build rubric evaluation prompts for each section
-    section_evals = []
-    for section, criteria in RUBRIC.items():
-        content = report.get(section, "")
-        if isinstance(content, list):
-            content = "\n".join(f"- {item}" for item in content)
-        section_evals.append(
-            f"### Section: {section}\n"
-            f"**Content:**\n{content}\n\n"
-            f"**Rubric:**\n{criteria}"
-        )
-
     user_message = (
-        f"Evaluate this drug target assessment report for: **{target}** (Company: {company})\n\n"
-        + "\n\n---\n\n".join(section_evals)
-        + "\n\nScore each section 1–5 and provide your overall quality assessment."
+        f"Evaluate the **{section}** section for: {target} (Company: {company})\n\n"
+        f"**Section content:**\n{content}\n\n"
+        f"**Rubric:**\n{criteria}"
     )
 
     _t0 = time.perf_counter()
     response = _client.messages.create(
         model=EVAL_JUDGE_MODEL,
-        max_tokens=EVAL_JUDGE_MAX_TOKENS,
+        max_tokens=512,
         system=_SYSTEM,
-        tools=[_JUDGE_TOOL],
-        tool_choice={"type": "tool", "name": "submit_section_scores"},
+        tools=[_SECTION_TOOL],
+        tool_choice={"type": "tool", "name": "submit_section_score"},
         messages=[{"role": "user", "content": user_message}],
     )
     _latency = time.perf_counter() - _t0
@@ -147,7 +124,7 @@ def judge_report(report: dict, target: str, company: str) -> dict:
     tracker = get_tracker()
     if tracker:
         tracker.record_node(
-            "judge",
+            f"judge_{section}",
             model=EVAL_JUDGE_MODEL,
             input_tokens=response.usage.input_tokens,
             output_tokens=response.usage.output_tokens,
@@ -155,38 +132,59 @@ def judge_report(report: dict, target: str, company: str) -> dict:
         )
 
     if response.stop_reason == "max_tokens":
-        log.error(
-            f"Judge hit max_tokens ({EVAL_JUDGE_MAX_TOKENS}) — "
-            "tool call was truncated, scores are unusable. "
-            "Consider raising EVAL_JUDGE_MAX_TOKENS in config.py."
-        )
-        return {"error": f"Judge hit token limit ({EVAL_JUDGE_MAX_TOKENS}) before completing scores."}
+        log.error(f"Judge hit max_tokens on section '{section}' — 512 tokens should be ample; check content length")
+        return {"section": section, "score": 0, "reasoning": "Judge hit token limit.", "issues": [], "error": True}
 
     for block in response.content:
-        if block.type == "tool_use" and block.name == "submit_section_scores":
-            scores = block.input
-            log.debug(f"Judge raw response keys: {list(scores.keys())}")
-            log.debug(f"Judge stop_reason: {response.stop_reason}")
+        if block.type == "tool_use" and block.name == "submit_section_score":
+            return {"section": section, **block.input}
 
-            section_scores = scores.get("section_scores", [])
+    log.error(f"Judge returned no tool_use block for section '{section}'")
+    return {"section": section, "score": 0, "reasoning": "Judge failed to return a score.", "issues": [], "error": True}
 
-            if not section_scores:
-                log.warning("Judge returned empty section_scores — likely token limit reached")
 
-            avg = (
-                sum(s.get("score", 0) for s in section_scores) / len(section_scores)
-                if section_scores else 0.0
-            )
-            return {
-                "target": target,
-                "company": company,
-                "section_scores": section_scores,
-                "overall_quality": scores.get("overall_quality", 0),
-                "avg_section_score": round(avg, 2),
-                "strongest_section": scores.get("strongest_section", "unknown"),
-                "weakest_section": scores.get("weakest_section", "unknown"),
-                "top_improvement": scores.get("top_improvement", ""),
-            }
+def judge_report(report: dict, target: str, company: str) -> dict:
+    """
+    Run LLM-as-judge evaluation on a single report.
+    Scores each section in a separate API call so no single call can be
+    truncated by token limits. Derives overall/strongest/weakest from scores.
+    """
+    section_scores = []
+    for section, criteria in RUBRIC.items():
+        content = report.get(section, "")
+        if isinstance(content, list):
+            content = "\n".join(f"- {item}" for item in content)
+        result = _score_section(section, content, criteria, target, company)
+        section_scores.append(result)
+        log.info(f"[{target}/{company}] Judge scored '{section}': {result.get('score')}/5")
 
-    log.error(f"Judge returned no tool_use block. stop_reason={response.stop_reason}")
-    return {"error": "Judge failed to return structured scores."}
+    scored = [s for s in section_scores if not s.get("error")]
+    failed = [s["section"] for s in section_scores if s.get("error")]
+
+    if not scored:
+        return {"error": "Judge failed to score any section."}
+
+    avg = sum(s["score"] for s in scored) / len(scored)
+    strongest = max(scored, key=lambda s: s["score"])
+    weakest = min(scored, key=lambda s: s["score"])
+
+    # top_improvement: surface the first specific issue from the weakest section,
+    # or fall back to its reasoning if no issues were listed
+    top_issue = (weakest.get("issues") or [weakest.get("reasoning", "")])[0]
+    top_improvement = f"{weakest['section']}: {top_issue}"
+
+    result = {
+        "target": target,
+        "company": company,
+        "section_scores": section_scores,
+        "overall_quality": round(avg),
+        "avg_section_score": round(avg, 2),
+        "strongest_section": strongest["section"],
+        "weakest_section": weakest["section"],
+        "top_improvement": top_improvement,
+    }
+    if failed:
+        result["failed_sections"] = failed
+        log.warning(f"[{target}/{company}] Judge failed on sections: {failed}")
+
+    return result

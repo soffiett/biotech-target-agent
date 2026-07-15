@@ -8,6 +8,9 @@ reviewer after the report is submitted.
 
 ## Biology Rationale
 
+**Length:** 150–200 words. Front-load the key claim in sentence one. Supporting
+detail follows; do not bury the conclusion.
+
 **What this section must do:**
 Establish whether the biological evidence is strong enough to justify investing
 in this target. This is the most scrutinised section — weak biology is the
@@ -35,6 +38,9 @@ single most common reason assessments are sent back for revision.
 ---
 
 ## Large Molecule Druggability
+
+**Length:** 100–150 words. This section is a structured decision, not a
+literature review — state the verdict and format recommendation concisely.
 
 **What this section must do:**
 Assess whether this target is accessible to a biologic and recommend the most
@@ -66,6 +72,9 @@ of antibody development.
 
 ## Clinical Precedent
 
+**Length:** 150–200 words. Name programs and their status in the first half;
+draw the implication in the second half.
+
 **What this section must do:**
 Map what is already known from the clinic about this target or its pathway.
 Clinical data — positive or negative — is the strongest available evidence for
@@ -93,6 +102,9 @@ or against a target.
 
 ## Competitive Landscape
 
+**Length:** 100–150 words. Name competitors, assess crowding, state one
+differentiation path — no more.
+
 **What this section must do:**
 Assess whether there is room for a new entrant and what differentiation would
 be required.
@@ -115,6 +127,9 @@ be required.
 ---
 
 ## Key Risks
+
+**Length:** 150–200 words total across all risks. One sentence per risk is
+sufficient if it names the specific mechanism and whether it is addressable.
 
 **What this section must do:**
 Identify 3–5 risks that are specific to this target, ranked by importance.
@@ -143,6 +158,8 @@ Generic drug development risks (e.g. "clinical trials may fail") do not count.
 ---
 
 ## Confidence Score (0–10) and Reasoning
+
+**Length:** 75–100 words. Two sentences up, two sentences down — no padding.
 
 **What this section must do:**
 Provide a calibrated score with explicit bidirectional reasoning. A score
