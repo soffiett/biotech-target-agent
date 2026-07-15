@@ -8,7 +8,7 @@ and run standalone for novel targets with no ground truth.
 
 import time
 import anthropic
-from config import EVAL_JUDGE_MODEL, EVAL_JUDGE_MAX_TOKENS
+from config import EVAL_JUDGE_MODEL
 from logger import get_logger
 from observability.tracker import get_tracker
 
