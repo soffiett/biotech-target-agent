@@ -112,9 +112,17 @@ def ask_followup(
     )
     _latency = time.perf_counter() - _t0
 
-    answer = response.content[0].text if response.content else (
-        "I was unable to generate a response. Please try rephrasing your question."
-    )
+    if response.stop_reason == "max_tokens":
+        partial = response.content[0].text if response.content else ""
+        log.warning(f"[{target}/{company}] Follow-up hit max_tokens — returning partial answer")
+        answer = (
+            partial
+            + "\n\n_(Response was cut short. Try asking a more specific question.)_"
+        )
+    elif response.content:
+        answer = response.content[0].text
+    else:
+        answer = "I was unable to generate a response. Please try rephrasing your question."
 
     tracker = get_tracker()
     if tracker:

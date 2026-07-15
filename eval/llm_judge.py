@@ -154,6 +154,14 @@ def judge_report(report: dict, target: str, company: str) -> dict:
             latency_s=_latency,
         )
 
+    if response.stop_reason == "max_tokens":
+        log.error(
+            f"Judge hit max_tokens ({EVAL_JUDGE_MAX_TOKENS}) — "
+            "tool call was truncated, scores are unusable. "
+            "Consider raising EVAL_JUDGE_MAX_TOKENS in config.py."
+        )
+        return {"error": f"Judge hit token limit ({EVAL_JUDGE_MAX_TOKENS}) before completing scores."}
+
     for block in response.content:
         if block.type == "tool_use" and block.name == "submit_section_scores":
             scores = block.input

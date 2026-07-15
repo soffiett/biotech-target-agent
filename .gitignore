@@ -13,3 +13,4 @@ build/
 logs/
 deploy/.aws-config
 observability/runs.jsonl
+eval/transcripts/
