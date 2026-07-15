@@ -55,16 +55,18 @@ def search_clinical_trials(query: str, max_results: int = 10) -> list[dict]:
             if i.get("type") in ("BIOLOGICAL", "DRUG")
         ]
 
-        studies.append({
-            "nct_id": nct_id,
-            "title": id_mod.get("briefTitle", ""),
-            "status": status_mod.get("overallStatus", ""),
-            "phase": phases[0] if phases else "N/A",
-            "sponsor": sponsor_mod.get("leadSponsor", {}).get("name", ""),
-            "conditions": cond_mod.get("conditions", []),
-            "interventions": interventions,
-            "summary": desc_mod.get("briefSummary", "")[:400],
-            "url": f"https://clinicaltrials.gov/study/{nct_id}",
-        })
+        phase_str = phases[0] if phases else "N/A"
+        conditions_str = ", ".join(cond_mod.get("conditions", [])[:3]) or "N/A"
+        interventions_str = ", ".join(interventions[:2]) or "N/A"
+        title = id_mod.get("briefTitle", "N/A")
+        status = status_mod.get("overallStatus", "N/A")
+        sponsor = sponsor_mod.get("leadSponsor", {}).get("name", "N/A")
+
+        # Compact one-line format keeps each record ~120 chars instead of ~700,
+        # preventing tool result JSON from dominating the agent's context window.
+        studies.append(
+            f"{nct_id} | {phase_str} | {status} | {sponsor} | {interventions_str} | {conditions_str} | "
+            f"https://clinicaltrials.gov/study/{nct_id} | {title}"
+        )
 
     return studies
