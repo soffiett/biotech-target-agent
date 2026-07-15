@@ -171,6 +171,11 @@ def clinical_trials_node(state: TargetAssessmentState) -> dict:
             break
 
         if response.stop_reason == "tool_use":
+            interim = _harvest_text(response.content)
+            if interim:
+                findings.extend(interim)
+                log.debug(f"[{target}/{company}] Harvested {len(interim)} interim finding(s) at iteration {_ + 1}")
+
             tool_results = []
             for block in response.content:
                 if block.type == "tool_use":
