@@ -17,6 +17,20 @@ st.set_page_config(
     layout="wide",
 )
 
+# Short display labels for the progress status line — keyed by evidence_type
+# (see models/schemas.py EvidenceType) so this stays in sync with whatever
+# tools biology_node actually calls, instead of a hardcoded source list.
+_EVIDENCE_SOURCE_LABELS = {
+    "human_genetics": "GWAS",
+    "rare_variant": "ClinVar/OMIM",
+    "crispr_dependency": "DepMap",
+    "tissue_expression": "HPA/GTEx",
+    "pathway_biology": "Reactome",
+    "literature": "PubMed",
+    "preprint": "bioRxiv",
+    "company_disclosure": "web",
+}
+
 st.title("Biotech Target Assessment Agent")
 st.caption(
     "Multi-agent system that evaluates whether a drug target is likely to yield "
@@ -109,8 +123,15 @@ if submitted and target and company:
                             "searching for gaps identified by judge"
                         )
                     else:
-                        n = len(update.get("bio_findings", []))
-                        st.write(f"Biology agent: {n} finding(s) from PubMed, bioRxiv, web")
+                        findings = update.get("bio_findings", [])
+                        n = len(findings)
+                        sources = dict.fromkeys(
+                            _EVIDENCE_SOURCE_LABELS[f["evidence_type"]]
+                            for f in findings
+                            if f.get("evidence_type") in _EVIDENCE_SOURCE_LABELS
+                        )
+                        sources_str = ", ".join(sources) or "no sources returned data"
+                        st.write(f"Biology agent: {n} finding(s) from {sources_str}")
                 elif node_name == "clinical_trials":
                     n = len(update.get("trial_findings", []))
                     st.write(f"Clinical trial agent: {n} finding(s) from ClinicalTrials.gov")
