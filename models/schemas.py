@@ -14,11 +14,28 @@ class ParsedQuery(BaseModel):
         description="'high' if all key fields clearly stated, else 'low'.")
 
 
+EvidenceType = Literal[
+    "human_genetics",       # GWAS / OpenTargets genetic association
+    "rare_variant",         # ClinVar / OMIM
+    "crispr_dependency",    # DepMap
+    "tissue_expression",    # HPA / GTEx
+    "pathway_biology",      # Reactome
+    "literature",           # PubMed
+    "preprint",             # bioRxiv / medRxiv
+    "company_disclosure",   # general web search (press releases, investor decks)
+    "agent_narrative",      # the agent's own free-text analysis, not tied to one source
+]
+
+
 class BiologyFinding(BaseModel):
     """A single finding produced by the biology search agent."""
     type: str = Field(description="Finding category, e.g. 'biology_summary'.")
     content: str = Field(description="Full text of the finding.")
     source: str = Field(description="Agent or tool that produced this finding.")
+    evidence_type: EvidenceType = Field(
+        default="agent_narrative",
+        description="Evidence category, used to weight sources during synthesis.",
+    )
 
 
 class TrialFinding(BaseModel):
@@ -40,8 +57,11 @@ class AssessmentReport(BaseModel):
     )
     druggability_assessment: str = Field(
         description=(
-            "Assessment of whether this target is suitable for a large molecule approach — "
-            "accessibility, format, PK considerations."
+            "Modality-agnostic druggability assessment: which therapeutic modality "
+            "(small molecule, large molecule/antibody, or other e.g. PROTAC, oligonucleotide) "
+            "the target's biology actually supports, which modality the company is pursuing, "
+            "and whether that choice fits the biology — accessibility, binding pocket, format, "
+            "PK considerations."
         )
     )
     clinical_precedent: str = Field(
@@ -61,7 +81,9 @@ class AssessmentReport(BaseModel):
         description=(
             "0–10. 8–10: highly validated target, clear path. "
             "5–7: moderate evidence, meaningful uncertainties. "
-            "0–4: weak evidence or significant red flags."
+            "0–4: weak evidence, significant red flags, OR the company's chosen modality is a "
+            "poor fit for the target's biology per druggability_assessment — a modality mismatch "
+            "caps this score regardless of how strong the underlying biological validation is."
         )
     )
     confidence_reasoning: str = Field(

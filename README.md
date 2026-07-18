@@ -1,8 +1,8 @@
 # Biotech Target Assessment Agent
 
-A multi-agent system that evaluates whether a biotech company's drug target is likely to yield a successful large molecule (antibody/biologic) therapeutic.
+A multi-agent system that evaluates whether a biotech company's drug target is likely to yield a successful therapeutic — modality-agnostic, determining whether small molecule, large molecule (antibody/biologic), or another modality best fits the target's biology.
 
-Built with LangGraph, Claude Haiku + Sonnet, and free public APIs (OpenTargets, PubMed, ClinicalTrials.gov, bioRxiv). Designed for accuracy on a personal budget.
+Built with LangGraph, Claude Haiku + Sonnet, and free public APIs (OpenTargets, GWAS credible sets, ClinVar/OMIM, DepMap, HPA/GTEx, Reactome, PubMed, ClinicalTrials.gov, bioRxiv). Designed for accuracy on a personal budget.
 
 **Deployed on AWS ECS Fargate** (ARM64 Graviton2) with ECR, Secrets Manager, and CloudWatch logging.
 
@@ -19,13 +19,13 @@ User Input (free-form text or structured fields)
               │
      ┌────────┴────────┐
      ▼                 ▼
-[Biology Agent]  [Clinical Trial Agent]    Haiku 4.5 — run in parallel
-  · PubMed         · ClinicalTrials.gov
-  · bioRxiv        · Tavily
-  · Tavily
-     └────────┬────────┘
-              ▼
-      [Synthesis Agent]          Sonnet 4.6 · ChromaDB RAG
+[Biology Agent]                       [Clinical Trial Agent]     Haiku 4.5 — run in parallel
+ · GWAS/OpenTargets · ClinVar/OMIM      · ClinicalTrials.gov
+ · DepMap · HPA/GTEx · Reactome         · Tavily
+ · PubMed · bioRxiv · Tavily
+     └─────────────────┬─────────────────┘
+                        ▼
+      [Synthesis Agent]          Sonnet 4.6 · ChromaDB RAG · modality-agnostic druggability
               │
          [Judge Node]            Sonnet 4.6 — scores each section 1–5
           · if biology ≤ 2/5 → re-runs Biology Agent with critique (max 1×)
@@ -38,11 +38,23 @@ User Input (free-form text or structured fields)
 | Node | Model | Role |
 |------|-------|------|
 | **Query Parser** | Haiku 4.5 | Extracts target / company / indication from free-form text |
-| **Prefetch** | — (API calls) | Fetches OpenTargets structured data; derives a tailored research brief for each downstream agent based on clinical stage and genetic evidence |
-| **Biology Agent** | Haiku 4.5 | Searches PubMed, bioRxiv, and web using a focus brief set by prefetch; re-runs with judge critique injected if initial score ≤ 2/5 |
+| **Prefetch** | — (API calls) | Fetches OpenTargets structured data; derives a tailored research brief for each downstream agent based on clinical stage and genetic evidence; distinguishes "target not found" from "OpenTargets unreachable" so a transient outage isn't read as evidence about the target |
+| **Biology Agent** | Haiku 4.5 | Runs 5 structured evidence tools (GWAS/OpenTargets, ClinVar/OMIM, DepMap, HPA/GTEx, Reactome) plus PubMed/bioRxiv/web search; every finding is tagged with an `evidence_type` used to weight it during synthesis; re-runs with judge critique injected if initial score ≤ 2/5 |
 | **Clinical Trial Agent** | Haiku 4.5 | Searches ClinicalTrials.gov and web using a focus brief set by prefetch; maps trial phase, status, failures, and competitive landscape |
-| **Synthesis Agent** | Sonnet 4.6 | Combines all findings with RAG context to produce a structured report with bidirectional confidence reasoning |
-| **Judge Node** | Sonnet 4.6 | Scores each section (1–5) against a rubric; routes back to Biology Agent if biology score ≤ 2/5, otherwise surfaces report to user |
+| **Synthesis Agent** | Sonnet 4.6 | Combines all findings (grouped by evidence-tier weight) with RAG context to produce a structured, modality-agnostic report — determines whether small molecule, large molecule, or another modality fits the target and caps confidence if the company's actual approach doesn't match |
+| **Judge Node** | Sonnet 4.6 | Scores each section (1–5) against a rubric, including whether a modality mismatch was correctly reflected in the confidence score; routes back to Biology Agent if biology score ≤ 2/5, otherwise surfaces report to user |
+
+### Evidence weighting
+
+Biology findings are tagged by source at collection time (not inferred from prose) and grouped into
+labeled sections in order of decreasing evidentiary weight before reaching synthesis:
+
+`human_genetics` (GWAS/OpenTargets) & `rare_variant` (ClinVar/OMIM) → `crispr_dependency` (DepMap) →
+`tissue_expression` (HPA/GTEx) & `pathway_biology` (Reactome) → `literature` (PubMed) →
+`preprint` (bioRxiv) & `company_disclosure` (web search)
+
+`SYNTHESIS_SYSTEM_PROMPT` instructs the model to weight sections accordingly and flag explicitly if
+the rationale rests only on the weakest tiers.
 
 ### Context engineering
 
@@ -67,6 +79,19 @@ The prefetch node reads OpenTargets structured output (approved drugs, clinical 
 
 ### Biology Agent tools
 
+Structured evidence tools — one deterministic call each, auto-scoped to the current target/indication
+(the model doesn't retype the gene symbol, since GTEx/ClinVar require exact matches):
+
+| Source | Tool | Evidence type | What it provides |
+|--------|------|---------------|-------------------|
+| **GWAS credible sets** (OpenTargets GraphQL) | `tools/gwas.py` | `human_genetics` | L2G-scored genetic association evidence for the target-disease pair |
+| **ClinVar + OMIM** (NCBI E-utilities) | `tools/clinvar_omim.py` | `rare_variant` | Pathogenic variant classifications, associated conditions, MIM record cross-reference |
+| **DepMap** (via OpenTargets) | `tools/depmap.py` | `crispr_dependency` | CRISPR knockout gene-effect scores by tissue/cell line |
+| **HPA + GTEx** | `tools/expression.py` | `tissue_expression` | Tissue specificity summary (HPA) and per-tissue median TPM (GTEx) |
+| **Reactome** | `tools/reactome.py` | `pathway_biology` | Pathways containing the target, for mechanism context |
+
+Literature & narrative tools:
+
 | Source | What it provides |
 |--------|-----------------|
 | **PubMed** (NCBI E-utilities) | Peer-reviewed literature — disease mechanism, animal models, biomarker studies |
@@ -82,15 +107,20 @@ The prefetch node reads OpenTargets structured output (approved drugs, clinical 
 
 ### RAG Knowledge Base (ChromaDB, local)
 
-Three curated seed documents retrieved by the synthesis agent:
+Four curated seed documents. Two (target validation, clinical development stages) are retrieved by
+similarity search; the two modality druggability guides are always injected directly into every
+synthesis call instead, so the model compares both before determining fit rather than depending on
+search to surface the right one before it knows the target's modality:
 
-| File | Content |
-|------|---------|
-| `target_validation_framework.md` | Tiered evidence tiers (genetic → functional), red flags |
-| `large_molecule_druggability.md` | Antibody format selection, extracellular vs intracellular, PK |
-| `clinical_development_stages.md` | Phase success rates, accelerated pathways, common failure reasons |
+| File | Content | How it reaches the model |
+|------|---------|---------------------------|
+| `target_validation_framework.md` | Tiered evidence tiers (genetic → functional), red flags | Retrieved (similarity search) |
+| `clinical_development_stages.md` | Phase success rates, accelerated pathways, common failure reasons | Retrieved (similarity search) |
+| `large_molecule_druggability.md` | Antibody/biologic format selection, extracellular vs intracellular, PK | Always injected |
+| `small_molecule_druggability.md` | Binding-pocket tractability, PROTACs/oligonucleotides, oral PK | Always injected |
 
-Add your own `.md` files to `rag/data/` and delete `rag/chroma_db/` to re-ingest.
+Add your own `.md` files to `rag/data/` and delete `rag/chroma_db/` to re-ingest. Add a filename to
+`_PROMPT_INJECTED` in `rag/ingestion.py` if it should always be present rather than retrieved.
 
 ---
 
@@ -101,7 +131,7 @@ Each assessment produces:
 - **Recommendation**: Strong / Moderate / Weak / Against
 - **Confidence score**: 0–10 with reasoning
 - **Biology rationale**: genetic evidence, disease mechanism, preclinical validation, safety
-- **Druggability assessment**: large molecule accessibility, format recommendation, PK
+- **Druggability & modality assessment**: which modality (small molecule, large molecule, or other) fits the target's biology, whether the company's actual approach matches, format recommendation, PK
 - **Clinical precedent**: trials for this target and related mechanisms, phase + status
 - **Competitive landscape**: approved drugs, other programs, crowding risk
 - **Key risks**: 3–5 specific, actionable concerns
@@ -115,18 +145,18 @@ The `eval/` module tests agent quality at development time — run it after chan
 
 ```
 eval/
-├── ground_truth.py       # 13 curated test cases with defensible ground truth
+├── ground_truth.py       # 16 curated test cases with defensible ground truth
 ├── llm_judge.py          # Section-by-section rubric scoring using Sonnet
 ├── consistency_check.py  # Runs agent twice, flags low-reliability outputs
 ├── rag_eval.py           # Retrieval-only eval: source routing, relevance, coverage, chunk integrity
 └── runner.py             # Smart routing: L1 + L2 for known targets, consistency + L2 for novel
 ```
 
-**Ground truth dataset — 13 targets across all four recommendation tiers:**
+**Ground truth dataset — 16 targets across all four recommendation tiers, both modalities:**
 
 | Tier | Count | Examples |
 |------|-------|---------|
-| Strong | 7 | PD-L1, IL-6R, VEGF, HER2, TROP2, PCSK9, IL-17A |
+| Strong | 10 | PD-L1, IL-6R, VEGF, HER2, TROP2, PCSK9, IL-17A (large molecule); BCR-ABL, EGFR T790M, PI3K/mTOR (small molecule) |
 | Moderate | 1 | BAFF (approved but modest efficacy, narrow label) |
 | Weak | 1 | VISTA (Phase 1 only, limited data) |
 | Against | 4 | TIGIT, CD28, BACE1, EGFRvIII |
@@ -234,7 +264,7 @@ TAVILY_API_KEY=...      # https://tavily.com (free tier: 1000 searches/month)
 NCBI_EMAIL=...          # any email — required by PubMed API policy
 ```
 
-OpenTargets, ClinicalTrials.gov, and bioRxiv are all free with no key required.
+OpenTargets, GWAS credible sets, ClinVar/OMIM, DepMap, HPA/GTEx, Reactome, ClinicalTrials.gov, and bioRxiv are all free with no key required.
 
 ### 3. Run
 
@@ -269,7 +299,7 @@ The ChromaDB knowledge base is built automatically on first launch. The `BAAI/bg
 - **LLMs**: Claude Haiku 4.5 (search agents, parser) + Claude Sonnet 4.6 (synthesis, judge)
 - **Vector store**: ChromaDB (local, persistent)
 - **Embeddings**: `BAAI/bge-base-en-v1.5` via sentence-transformers (CPU)
-- **APIs**: OpenTargets GraphQL, PubMed E-utilities, ClinicalTrials.gov v2, Europe PMC (bioRxiv), Tavily
+- **APIs**: OpenTargets GraphQL (genetics, DepMap essentiality), NCBI E-utilities (PubMed, ClinVar, OMIM), GTEx Portal API v2, Human Protein Atlas, Reactome ContentService, ClinicalTrials.gov v2, Europe PMC (bioRxiv), Tavily
 - **UI**: Streamlit
 
 ---
@@ -282,6 +312,7 @@ A cross-section of the ground truth dataset — useful for quick manual testing:
 |--------|---------|------------|----------|
 | PD-L1 | Genentech | NSCLC | Strong |
 | PCSK9 | Amgen | Hypercholesterolemia | Strong |
+| BCR-ABL | Novartis | Chronic myeloid leukemia | Strong (small molecule) |
 | BAFF | GSK | Systemic lupus erythematosus | Moderate |
 | VISTA | ImmuNext | Solid tumors | Weak |
 | TIGIT | Roche | NSCLC | Against |
@@ -308,14 +339,20 @@ biotech-target-agent/
 │       └── judge.py              # LLM-as-judge quality node
 ├── tools/
 │   ├── query_parser.py           # Free-form input → structured fields
-│   ├── opentargets.py            # OpenTargets GraphQL API
+│   ├── opentargets.py            # OpenTargets GraphQL API (prefetch + resolve_target_ensembl_id)
+│   ├── gwas.py                   # GWAS credible-set genetic evidence (OpenTargets GraphQL)
+│   ├── clinvar_omim.py           # Rare/pathogenic variant evidence (NCBI E-utilities)
+│   ├── depmap.py                 # CRISPR dependency by tissue (OpenTargets GraphQL)
+│   ├── expression.py             # Tissue expression (Human Protein Atlas + GTEx)
+│   ├── reactome.py               # Pathway membership (Reactome ContentService)
 │   ├── pubmed.py                 # PubMed E-utilities API
 │   ├── biorxiv.py                # bioRxiv/medRxiv via Europe PMC
 │   ├── clinicaltrials.py         # ClinicalTrials.gov v2 API
 │   └── web_search.py             # Tavily web search
 ├── rag/
 │   ├── vectorstore.py            # ChromaDB + sentence-transformers
-│   ├── ingestion.py              # Markdown → chunks → embeddings
+│   ├── ingestion.py              # Markdown → chunks → embeddings (some files always
+│   │                              # prompt-injected instead — see _PROMPT_INJECTED)
 │   └── data/                     # Curated biotech knowledge documents
 ├── eval/
 │   ├── ground_truth.py           # 13 curated test cases + L1 scoring

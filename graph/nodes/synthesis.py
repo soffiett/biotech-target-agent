@@ -21,8 +21,19 @@ _client = anthropic.Anthropic()
 
 # Loaded once at import time — injected into every synthesis call so the agent
 # always knows the section-by-section writing standard it is being evaluated against.
-_SKILL_PATH = Path(__file__).parent.parent.parent / "rag" / "data" / "synthesis_skill.md"
+_RAG_DATA_DIR = Path(__file__).parent.parent.parent / "rag" / "data"
+_SKILL_PATH = _RAG_DATA_DIR / "synthesis_skill.md"
 _SYNTHESIS_SKILL = _SKILL_PATH.read_text(encoding="utf-8") if _SKILL_PATH.exists() else ""
+
+# The modality decision needs both guides compared against each other every time —
+# retrieving one or the other via similarity search would gamble on which modality
+# "wins" the search before the model has even assessed the target, so both are
+# always injected directly rather than left to RAG_TOP_K similarity ranking.
+_MODALITY_GUIDES = "\n\n".join(
+    p.read_text(encoding="utf-8")
+    for p in (_RAG_DATA_DIR / "large_molecule_druggability.md", _RAG_DATA_DIR / "small_molecule_druggability.md")
+    if p.exists()
+)
 
 
 def _resolve_refs(schema: dict) -> dict:
@@ -70,6 +81,41 @@ REPORT_TOOL = {
 }
 
 
+# Order (highest evidentiary weight first) and section labels for grouping bio_findings
+# by evidence_type — lets the synthesis model see which tier each piece of evidence
+# came from instead of one undifferentiated blob.
+_EVIDENCE_SECTION_ORDER = [
+    ("agent_narrative", "Biology Agent Analysis"),
+    ("human_genetics", "Human Genetics (GWAS / OpenTargets)"),
+    ("rare_variant", "Rare Variants (ClinVar / OMIM)"),
+    ("crispr_dependency", "CRISPR Dependency (DepMap)"),
+    ("tissue_expression", "Tissue Expression (HPA / GTEx)"),
+    ("pathway_biology", "Pathway Biology (Reactome)"),
+    ("literature", "Literature (PubMed)"),
+    ("preprint", "Preprints (bioRxiv)"),
+    ("company_disclosure", "Company Disclosures / Web"),
+]
+
+
+def _group_bio_context(bio_findings: list[dict]) -> str:
+    """Group biology findings into labeled sections by evidence_type, ordered by weight."""
+    by_type: dict[str, list[str]] = {}
+    for f in bio_findings:
+        if not f.get("content"):
+            continue
+        by_type.setdefault(f.get("evidence_type", "agent_narrative"), []).append(f["content"])
+
+    sections = []
+    for etype, label in _EVIDENCE_SECTION_ORDER:
+        items = by_type.pop(etype, None)
+        if items:
+            sections.append(f"### {label}\n" + "\n\n".join(items))
+    for etype, items in by_type.items():  # any evidence_type not in the fixed order above
+        sections.append(f"### {etype}\n" + "\n\n".join(items))
+
+    return "\n\n".join(sections) or "No biology findings available."
+
+
 # Sections with prose content and their target word limits from synthesis_skill.md
 _SECTION_WORD_LIMITS = {
     "biology_rationale": 200,
@@ -99,24 +145,24 @@ def synthesis_node(state: TargetAssessmentState) -> dict:
     bio_findings = state.get("bio_findings", [])
     trial_findings = state.get("trial_findings", [])
 
-    # Pull relevant frameworks from the knowledge base
+    # Pull relevant frameworks from the knowledge base (modality guides are injected
+    # directly below, not retrieved here — see _MODALITY_GUIDES)
     rag_results = query_knowledge_base(
-        f"large molecule drug target validation {target} druggability clinical",
+        f"drug target validation {target} safety immunogenicity clinical development phase success rate",
         n_results=RAG_TOP_K,
     )
     rag_context = "\n\n".join(
         f"[{r['source']}]\n{r['content']}" for r in rag_results
     ) or "No additional context retrieved."
 
-    bio_context = "\n\n".join(
-        f["content"] for f in bio_findings if f.get("content")
-    ) or "No biology findings available."
+    bio_context = _group_bio_context(bio_findings)
 
     trial_context = "\n\n".join(
         f["content"] for f in trial_findings if f.get("content")
     ) or "No clinical trial findings available."
 
     skill_block = f"\n\n## Report Writing Standard\n{_SYNTHESIS_SKILL}" if _SYNTHESIS_SKILL else ""
+    modality_block = f"\n\n## Modality Reference (compare both before choosing)\n{_MODALITY_GUIDES}" if _MODALITY_GUIDES else ""
 
     user_message = f"""Synthesize the following research to assess: **{target}** (Company: {company})
 
@@ -126,6 +172,7 @@ def synthesis_node(state: TargetAssessmentState) -> dict:
 ## Clinical Trial Landscape
 {trial_context}
 {skill_block}
+{modality_block}
 
 ## Knowledge Base: Target Validation Frameworks
 {rag_context}

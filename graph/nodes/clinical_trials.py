@@ -102,7 +102,7 @@ def clinical_trials_node(state: TargetAssessmentState) -> dict:
         {
             "role": "user",
             "content": (
-                f"Map the clinical landscape for **{target}** as a large molecule target.\n"
+                f"Map the clinical landscape for **{target}**.\n"
                 f"Company developing it: {company}\n"
                 f"Indication: {indication}\n\n"
                 f"## Pre-fetched Evidence Baseline\n{prefetch_summary}\n\n"

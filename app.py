@@ -20,7 +20,8 @@ st.set_page_config(
 st.title("Biotech Target Assessment Agent")
 st.caption(
     "Multi-agent system that evaluates whether a drug target is likely to yield "
-    "a successful large molecule therapeutic."
+    "a successful therapeutic, and which modality (small molecule, large molecule, "
+    "or other) fits it best."
 )
 
 
@@ -174,7 +175,27 @@ if st.session_state.get("assessment"):
 
     st.info(report.get("recommendation_summary", ""))
 
-    # ── Report quality panel ─────────────────────────────────────────────────
+    # ── Detailed sections ────────────────────────────────────────────────────
+    with st.expander("Biology Rationale", expanded=True):
+        st.write(report.get("biology_rationale", ""))
+    with st.expander("Druggability & Modality Assessment"):
+        st.write(report.get("druggability_assessment", ""))
+    with st.expander("Clinical Precedent"):
+        st.write(report.get("clinical_precedent", ""))
+    with st.expander("Competitive Landscape"):
+        st.write(report.get("competitive_landscape", ""))
+    with st.expander("Key Risks"):
+        for risk in report.get("key_risks", []):
+            st.warning(risk)
+    with st.expander("Confidence Score Reasoning"):
+        st.write(report.get("confidence_reasoning", ""))
+
+    if errors:
+        with st.expander("Warnings / Errors"):
+            for err in errors:
+                st.error(err)
+
+    # ── Report quality panel (transparency signal, shown last) ──────────────
     if quality and "error" not in quality:
         overall_q = quality.get("overall_quality", 0)
         q_label = {5: "Excellent", 4: "Good", 3: "Adequate", 2: "Weak", 1: "Poor"}.get(overall_q, "")
@@ -191,26 +212,6 @@ if st.session_state.get("assessment"):
                 st.markdown(f"**{s['section']}** `{score_bar}` {s['score']}/5 — {s['reasoning']}")
                 for issue in s.get("issues", []):
                     st.caption(f"  ⚠ {issue}")
-
-    # ── Detailed sections ────────────────────────────────────────────────────
-    with st.expander("Biology Rationale", expanded=True):
-        st.write(report.get("biology_rationale", ""))
-    with st.expander("Large Molecule Druggability"):
-        st.write(report.get("druggability_assessment", ""))
-    with st.expander("Clinical Precedent"):
-        st.write(report.get("clinical_precedent", ""))
-    with st.expander("Competitive Landscape"):
-        st.write(report.get("competitive_landscape", ""))
-    with st.expander("Key Risks"):
-        for risk in report.get("key_risks", []):
-            st.warning(risk)
-    with st.expander("Confidence Score Reasoning"):
-        st.write(report.get("confidence_reasoning", ""))
-
-    if errors:
-        with st.expander("Warnings / Errors"):
-            for err in errors:
-                st.error(err)
 
     # ── Follow-up Q&A ────────────────────────────────────────────────────────
     st.divider()

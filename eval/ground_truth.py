@@ -1,8 +1,9 @@
 """
 Level 1 Evaluation — Ground Truth Scoring
 
-Tests the agent against targets with known, unambiguous outcomes:
-- FDA-approved biologics (expected: Strong)
+Tests the agent against targets with known, unambiguous outcomes, across modalities
+(biologics and small molecules):
+- FDA-approved therapeutics with strong evidence (expected: Strong)
 - Documented Phase 3 failures (expected: Against/Weak)
 
 Run after any prompt change to catch regressions.
@@ -107,6 +108,57 @@ TEST_CASES = [
             "class validated by ixekizumab (Eli Lilly, 2016) and bimekizumab"
         ),
         "source": "FDA Purple Book; NEJM 2015",
+    },
+    # ── Small-molecule Strong cases (modality-agnostic coverage) ──────────────
+    # These test that strong biology + the right modality scores high without
+    # being penalized just for not being a biologic — the large-molecule-only
+    # assumption this system used to make would have under-scored all three.
+    {
+        "target": "BCR-ABL",
+        "company": "Novartis",
+        "indication": "chronic myeloid leukemia",
+        "expected_recommendation": "Strong",
+        "confidence_min": 8.0,
+        "rationale": (
+            "FDA approved (imatinib / Gleevec, accelerated approval 2001, full approval 2002 "
+            "after IRIS trial); 10-year overall survival 83.3% vs. ~50% pre-imatinib historical "
+            "controls; textbook oncogene-addiction target — intracellular fusion kinase, "
+            "correctly targeted with an ATP-competitive small molecule, not a biologic"
+        ),
+        "source": "FDA Purple Book; O'Brien et al. NEJM 2003 (IRIS); Hochhaus et al. NEJM 2017 (10-yr IRIS)",
+    },
+    {
+        "target": "EGFR T790M",
+        "company": "AstraZeneca",
+        "indication": "NSCLC",
+        "expected_recommendation": "Strong",
+        "confidence_min": 7.5,
+        "rationale": (
+            "FDA accelerated approval (osimertinib / Tagrisso, Nov 2015) for T790M-positive NSCLC "
+            "progressing on prior EGFR TKI; AURA trial ORR 61%, AURA2 ORR 70%; confirmatory Phase 3 "
+            "showed 70% reduction in progression risk vs. chemotherapy — an intracellular kinase "
+            "resistance mutation correctly addressed with a third-generation small-molecule TKI"
+        ),
+        "source": "FDA approval Nov 2015; AURA/AURA2 trial data; confirmatory Phase 3 (NEJM)",
+    },
+    {
+        "target": "PI3K/mTOR",
+        "company": "Celcuity",
+        "indication": "breast cancer",
+        "expected_recommendation": "Strong",
+        "confidence_min": 7.0,
+        "confidence_max": 8.5,
+        "rationale": (
+            "FDA approved (gedatolisib / REVTORPYK, July 14, 2026) with fulvestrant ± palbociclib "
+            "for HR+/HER2-, PIK3CA wild-type advanced breast cancer; Phase 3 VIKTORIA-1 showed 76% "
+            "(triplet) and 67% (doublet) reduction in progression risk vs. fulvestrant; PI3K/mTOR "
+            "are intracellular kinases with well-defined ATP pockets — correctly targeted with a "
+            "pan-isoform small-molecule inhibitor, not a biologic. Score should stay just below the "
+            "9-10 ceiling: no unified GWAS/ClinVar evidence exists for the pathway as a composite "
+            "target (genetic support is at the individual PIK3CA/PTEN node level), and the space is "
+            "crowded (alpelisib, inavolisib, capivasertib, everolimus already approved)"
+        ),
+        "source": "FDA.gov drug approval page (gedatolisib, July 2026); Celcuity VIKTORIA-1 Phase 3 results",
     },
     # ── Moderate case — approved but modest efficacy / narrow label ───────────
     {

@@ -37,14 +37,9 @@ SOURCE_ROUTING_CASES = [
         "description": "Safety red flags → target_validation_framework",
     },
     {
-        "query": "can antibodies reach intracellular targets ADC payload internalization",
-        "expected_source": "large_molecule_druggability",
-        "description": "Intracellular target accessibility → large_molecule_druggability",
-    },
-    {
-        "query": "which biologic format for a soluble cytokine versus a cell surface receptor",
-        "expected_source": "large_molecule_druggability",
-        "description": "Format selection guide → large_molecule_druggability",
+        "query": "immunogenicity risk of the therapeutic format safety considerations",
+        "expected_source": "target_validation_framework",
+        "description": "Immunogenicity risk → target_validation_framework",
     },
     {
         "query": "what is the phase 2 success rate for biologics and why do most programs fail",
@@ -57,16 +52,18 @@ SOURCE_ROUTING_CASES = [
         "description": "Regulatory pathways → clinical_development_stages",
     },
     {
-        "query": "target-mediated drug disposition TMDD half-life FcRn subcutaneous dosing",
-        "expected_source": "large_molecule_druggability",
-        "description": "PK considerations → large_molecule_druggability",
-    },
-    {
         "query": "biomarker enrichment patient selection increases clinical success rate",
         "expected_source": "clinical_development_stages",
         "description": "Success factors → clinical_development_stages",
     },
 ]
+
+# The two modality druggability guides (large_molecule_druggability.md,
+# small_molecule_druggability.md) are no longer in this vector store — they're
+# injected directly into every synthesis call (see graph/nodes/synthesis.py
+# _MODALITY_GUIDES) so the model always compares both, rather than depending on
+# similarity search to surface the right one before it knows the target's modality.
+# Same reasoning as synthesis_skill.md, which was never covered by this suite either.
 
 # ── Relevance floor cases ──────────────────────────────────────────────────────
 # On-topic queries must return at least one chunk with cosine similarity above
@@ -79,10 +76,10 @@ RELEVANCE_THRESHOLD = 0.45   # minimum cosine sim for an on-topic hit
 OFF_TOPIC_CEILING   = 0.55   # maximum cosine sim for an off-topic query
 
 ON_TOPIC_QUERIES = [
-    "monoclonal antibody target validation clinical evidence",
-    "large molecule biologic drug development biologics",
+    "human genetic validation GWAS mendelian randomization target",
+    "on-target safety immunogenicity risk assessment",
     "phase 3 pivotal trial efficacy endpoint regulatory approval",
-    "druggability extracellular epitope antibody binding",
+    "clinical development success rate by phase and indication",
 ]
 
 OFF_TOPIC_QUERIES = [
@@ -92,10 +89,11 @@ OFF_TOPIC_QUERIES = [
 ]
 
 # ── Coverage query ─────────────────────────────────────────────────────────────
-# This mirrors the actual synthesis node query. With RAG_TOP_K=4, we expect
-# chunks from at least 2 of the 3 source documents.
-SYNTHESIS_QUERY = "large molecule drug target validation druggability clinical development"
-COVERAGE_MIN_SOURCES = 2   # at least 2 distinct sources in top-4 results
+# This mirrors the actual synthesis node query. Only 2 documents remain in this
+# vector store (target_validation_framework, clinical_development_stages) — the
+# modality guides are prompt-injected directly, not retrieved (see note above).
+SYNTHESIS_QUERY = "drug target validation safety immunogenicity clinical development phase success rate"
+COVERAGE_MIN_SOURCES = 2   # both distinct sources in top-4 results
 
 
 # ── Test runners ──────────────────────────────────────────────────────────────

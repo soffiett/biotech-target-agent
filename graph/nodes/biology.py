@@ -4,6 +4,11 @@ import anthropic
 from tools.pubmed import search_pubmed
 from tools.web_search import search_web
 from tools.biorxiv import search_biorxiv
+from tools.gwas import search_gwas_evidence
+from tools.clinvar_omim import search_rare_variants
+from tools.depmap import search_crispr_dependency
+from tools.expression import search_tissue_expression
+from tools.reactome import search_pathways
 from graph.state import TargetAssessmentState
 from config import (
     SEARCH_MODEL,
@@ -68,20 +73,116 @@ TOOLS = [
             "required": ["query"],
         },
     },
+    {
+        "name": "search_gwas_evidence",
+        "description": (
+            "Human genetic association evidence for the target-indication pair, from GWAS "
+            "credible sets via OpenTargets (L2G-scored). Strongest tier of evidence — use early. "
+            "Automatically scoped to the current target and indication."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {"max_results": {"type": "integer", "default": 5}},
+        },
+    },
+    {
+        "name": "search_rare_variants",
+        "description": (
+            "Rare, high-penetrance variant evidence for the target from ClinVar (pathogenic "
+            "classifications + associated conditions) with an OMIM cross-reference. "
+            "Strongest tier of evidence for Mendelian disease genes."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {"max_results": {"type": "integer", "default": 5}},
+        },
+    },
+    {
+        "name": "search_crispr_dependency",
+        "description": (
+            "CRISPR knockout dependency (DepMap gene-effect scores) for the target, broken down "
+            "by tissue/cell-line. Shows whether cells require this gene to survive — strong "
+            "functional evidence, but skewed toward cancer cell lines."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {"max_results": {"type": "integer", "default": 5}},
+        },
+    },
+    {
+        "name": "search_tissue_expression",
+        "description": (
+            "Tissue expression profile for the target from Human Protein Atlas (specificity "
+            "summary) and GTEx (per-tissue median TPM). Indicates disease-tissue relevance and "
+            "on-target safety risk from expression in normal tissue — necessary but not "
+            "sufficient evidence on its own."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {"max_results": {"type": "integer", "default": 5}},
+        },
+    },
+    {
+        "name": "search_pathways",
+        "description": (
+            "Pathways containing the target, from Reactome. Useful for mechanism-of-action "
+            "context and identifying related druggable nodes — indirect evidence."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {"max_results": {"type": "integer", "default": 5}},
+        },
+    },
 ]
 
+# Evidence-type tag per tool, used to label structured findings for synthesis weighting.
+EVIDENCE_TYPE_BY_TOOL = {
+    "search_gwas_evidence": "human_genetics",
+    "search_rare_variants": "rare_variant",
+    "search_crispr_dependency": "crispr_dependency",
+    "search_tissue_expression": "tissue_expression",
+    "search_pathways": "pathway_biology",
+    "search_pubmed": "literature",
+    "search_biorxiv": "preprint",
+    "search_web": "company_disclosure",
+}
 
-def _run_tool(name: str, inputs: dict) -> str:
+def _run_tool(name: str, inputs: dict, target: str, indication: str) -> list[dict]:
+    """Dispatch a tool call and return its raw structured result (list of dicts)."""
     try:
+        max_results = inputs.get("max_results", 5)
         if name == "search_pubmed":
-            return json.dumps(search_pubmed(inputs["query"], inputs.get("max_results", 5)))
+            return search_pubmed(inputs["query"], max_results)
         if name == "search_biorxiv":
-            return json.dumps(search_biorxiv(inputs["query"], inputs.get("max_results", 5)))
+            return search_biorxiv(inputs["query"], max_results)
         if name == "search_web":
-            return json.dumps(search_web(inputs["query"], inputs.get("max_results", 5)))
+            return search_web(inputs["query"], max_results)
+        if name == "search_gwas_evidence":
+            return search_gwas_evidence(target, indication, max_results)
+        if name == "search_rare_variants":
+            return search_rare_variants(target, max_results)
+        if name == "search_crispr_dependency":
+            return search_crispr_dependency(target, max_results)
+        if name == "search_tissue_expression":
+            return search_tissue_expression(target, max_results)
+        if name == "search_pathways":
+            return search_pathways(target, max_results)
     except Exception as e:
-        return json.dumps({"error": str(e)})
-    return json.dumps({"error": "unknown tool"})
+        return [{"error": str(e)}]
+    return [{"error": "unknown tool"}]
+
+
+def _format_tool_result(results: list[dict]) -> str:
+    """Render a tool's structured results as compact, readable lines for downstream synthesis."""
+    lines = []
+    for item in results:
+        if not isinstance(item, dict):
+            continue
+        if "error" in item:
+            lines.append(f"(no data: {item['error']})")
+            continue
+        lines.append("; ".join(f"{k}={v}" for k, v in item.items() if v not in (None, "", [])))
+    return "\n".join(lines)
 
 
 def _trim_tool_result(result: str, max_chars: int = 4000) -> str:
@@ -152,14 +253,15 @@ def biology_node(state: TargetAssessmentState) -> dict:
         {
             "role": "user",
             "content": (
-                f"Assess the biological rationale for targeting **{target}** as a large molecule therapeutic.\n"
+                f"Assess the biological rationale for targeting **{target}**.\n"
                 f"Company: {company}\n"
                 f"Indication: {indication}\n\n"
                 f"## Pre-fetched Evidence Baseline\n{prefetch_summary}\n\n"
                 f"## Your Research Focus\n{biology_focus}\n"
                 f"{critique_section}\n"
-                "Search PubMed, bioRxiv, and the web. Address the focus areas above — "
-                "do not re-confirm what the baseline already establishes."
+                "Use the genetics, rare-variant, CRISPR-dependency, expression, and pathway tools "
+                "for structured evidence, and PubMed/bioRxiv/web search for narrative context. "
+                "Address the focus areas above — do not re-confirm what the baseline already establishes."
             ),
         }
     ]
@@ -246,9 +348,24 @@ def biology_node(state: TargetAssessmentState) -> dict:
                         f"[{target}/{company}] Biology tool call: {block.name}({query_str})")
                     if query_str:
                         search_queries.append(f"[{block.name}] {query_str}")
-                    result = _trim_tool_result(_run_tool(block.name, block.input))
-                    tool_results.append(
-                        {"type": "tool_result", "tool_use_id": block.id, "content": result})
+
+                    raw_result = _run_tool(block.name, block.input, target, indication)
+                    tool_results.append({
+                        "type": "tool_result",
+                        "tool_use_id": block.id,
+                        "content": _trim_tool_result(json.dumps(raw_result)),
+                    })
+
+                    formatted = _format_tool_result(raw_result)
+                    if formatted:
+                        findings.append(
+                            BiologyFinding(
+                                type="tool_evidence",
+                                content=formatted,
+                                source=block.name,
+                                evidence_type=EVIDENCE_TYPE_BY_TOOL.get(block.name, "agent_narrative"),
+                            ).model_dump()
+                        )
             messages.append({"role": "user", "content": tool_results})
             continue
 

@@ -37,36 +37,50 @@ single most common reason assessments are sent back for revision.
 
 ---
 
-## Large Molecule Druggability
+## Druggability & Modality Assessment
 
 **Length:** 100–150 words. This section is a structured decision, not a
-literature review — state the verdict and format recommendation concisely.
+literature review — state the modality verdict and format recommendation
+concisely. Do not assume a modality going in; determine it from the biology.
 
 **What this section must do:**
-Assess whether this target is accessible to a biologic and recommend the most
-appropriate format. Must be specific to this target, not a generic description
-of antibody development.
+Determine which therapeutic modality (small molecule, large molecule, or other
+— e.g. PROTAC, oligonucleotide) actually fits this target's biology, state
+which modality the company is pursuing, and say explicitly whether that choice
+fits. Must be specific to this target, not a generic description of drug
+development.
 
 **Required content:**
-1. **Accessibility verdict** — is the target extracellular, cell-surface, or
-   intracellular? Antibodies cannot reach intracellular targets without special
-   formats (ADC payload, degrader). State this explicitly.
-2. **Format recommendation** — recommend one primary format with a reason:
-   - Soluble cytokine/secreted protein → neutralising mAb or trap
-   - Cell-surface receptor (blocking) → antagonist mAb
-   - Cell-surface (killing/depleting) → ADC or ADCC-optimised mAb
-   - Two targets needed → bispecific
-   - Long half-life critical → Fc-fusion
-3. **PK consideration** — note any target-mediated drug disposition (TMDD)
-   risk if target expression is high, or tissue penetration challenge if
-   relevant (e.g. CNS, solid tumour core).
-4. **Differentiation angle** — if competitors exist, note whether a different
-   format, epitope, or SC vs IV formulation could differentiate.
+1. **Modality-fit verdict** — does the target have a druggable pocket (active
+   site, allosteric site, ATP pocket) that supports small molecule? Is it
+   extracellular/cell-surface/secreted, supporting large molecule (mAb,
+   bispecific, ADC, trap)? Intracellular targets without a pocket rule out
+   conventional antibodies but not small molecules, PROTACs, or
+   oligonucleotides — state this explicitly rather than defaulting to one
+   modality.
+2. **Company's actual modality** — name what the company is pursuing, and
+   whether it matches the fit determined above. A mismatch (e.g. an antibody
+   program against a target with no accessible epitope) is a fundamental flaw
+   and must be flagged as such, not softened.
+3. **Format recommendation within the fitting modality** — e.g. for large
+   molecule: soluble cytokine/secreted protein → neutralising mAb or trap;
+   cell-surface receptor (blocking) → antagonist mAb; cell-surface
+   (killing/depleting) → ADC or ADCC-optimised mAb; two targets needed →
+   bispecific. For small molecule: kinase/enzyme active site → ATP-competitive
+   or allosteric inhibitor; GPCR/ion channel → orthosteric or allosteric
+   compound; no functional pocket → PROTAC/molecular glue or ASO/siRNA.
+4. **PK consideration** — for large molecule: target-mediated drug disposition
+   (TMDD) risk if target expression is high, tissue penetration challenge
+   (CNS, solid tumour core). For small molecule: oral bioavailability,
+   half-life, CYP450/drug-drug interaction risk.
 
 **Common failures to avoid:**
-- Recommending "a monoclonal antibody" without justifying why over other formats
-- Not addressing whether the epitope is accessible
-- Ignoring TMDD risk for highly expressed targets
+- Assuming a modality without checking it against the target's biology
+- Recommending "a monoclonal antibody" or "an oral inhibitor" without
+  justifying why over other formats
+- Not addressing whether the company's actual modality choice fits the biology
+- Ignoring TMDD risk for highly expressed targets (large molecule) or
+  ignoring pocket tractability (small molecule)
 
 ---
 
@@ -184,3 +198,12 @@ without reasoning in both directions will be returned for revision.
 
 Both directions are required. A score supported only by positive evidence
 — without acknowledging what limits confidence — will be scored as incomplete.
+
+**Modality-fit override:** regardless of the biological evidence tier above, if
+the Druggability & Modality Assessment concludes the company's chosen modality
+is a poor fit for the target's biology (e.g. an antibody program against a
+purely intracellular target with no accessible epitope), cap the score at 3–4
+and say so explicitly in the DOWN reasoning. This is not one input averaged
+with the others — a fundamental modality mismatch is a hard ceiling. Strong
+biology with the right modality (including an all–small-molecule precedent
+landscape) is not penalized for modality and can still score 8–10.

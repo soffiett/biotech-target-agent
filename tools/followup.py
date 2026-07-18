@@ -27,7 +27,7 @@ Summary: {recommendation_summary}
 ### Biology Rationale
 {biology_rationale}
 
-### Large Molecule Druggability
+### Druggability & Modality Assessment
 {druggability_assessment}
 
 ### Clinical Precedent

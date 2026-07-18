@@ -5,8 +5,15 @@ from rag.vectorstore import add_documents, is_populated
 DATA_DIR = Path(__file__).parent / "data"
 
 # Files injected directly into prompts — excluded from ChromaDB to avoid
-# polluting retrieval with synthesis-specific instructions.
-_PROMPT_INJECTED = {"synthesis_skill.md"}
+# polluting retrieval with synthesis-specific instructions. The two modality
+# druggability guides are foundational reference the model must compare against
+# on every report (to determine which modality fits), not something that should
+# depend on a similarity search happening to favor one over the other.
+_PROMPT_INJECTED = {
+    "synthesis_skill.md",
+    "large_molecule_druggability.md",
+    "small_molecule_druggability.md",
+}
 
 
 def ingest_static_documents() -> None:

@@ -26,10 +26,17 @@ RUBRIC = {
         "- Does it acknowledge gaps or uncertainties where they exist?"
     ),
     "druggability_assessment": (
-        "Evaluate the druggability assessment section:\n"
-        "- Does it address whether the target is accessible to a large molecule (extracellular vs intracellular)?\n"
-        "- Does it recommend an appropriate biologic format (mAb, bispecific, ADC, Fc-fusion)?\n"
-        "- Does it consider PK/pharmacology relevant to biologics?\n"
+        "Evaluate the druggability assessment section. This assessment is modality-agnostic — it "
+        "should not assume large molecule or small molecule going in:\n"
+        "- Does it determine which modality (small molecule, large molecule, or other e.g. PROTAC, "
+        "oligonucleotide) the target's biology actually supports (druggable pocket for small "
+        "molecule; extracellular/cell-surface/secreted for large molecule)?\n"
+        "- Does it state which modality the company is actually pursuing, and whether that choice "
+        "fits the target's biology — flagging a mismatch clearly if one exists?\n"
+        "- Does it recommend an appropriate format within the fitting modality (e.g. mAb/bispecific/"
+        "ADC for large molecule; kinase inhibitor/PROTAC for small molecule)?\n"
+        "- Does it consider PK/pharmacology relevant to the modality in play (TMDD/tissue penetration "
+        "for large molecule; oral bioavailability/CYP450 for small molecule)?\n"
         "- Is the assessment specific to this target, not generic?"
     ),
     "clinical_precedent": (
@@ -57,7 +64,12 @@ RUBRIC = {
         "Evaluate whether the confidence score (0–10) is well-calibrated:\n"
         "- Is it consistent with the strength of evidence described in the report?\n"
         "- Does the confidence_reasoning explain what drives the score up and what holds it back?\n"
-        "- Is it appropriately cautious for a novel target vs. appropriately confident for a validated one?"
+        "- Is it appropriately cautious for a novel target vs. appropriately confident for a validated one?\n"
+        "- Critically: if the druggability assessment concluded the company's chosen modality is a "
+        "poor fit for the target's biology (e.g. an antibody program against a purely intracellular "
+        "target), was the score actually capped low (≤4) to reflect that hard constraint, rather "
+        "than being pulled up by strong biology/clinical validation alone? A high score despite an "
+        "acknowledged modality mismatch is a miscalibration and should be flagged as a specific issue."
     ),
 }
 

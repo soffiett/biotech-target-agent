@@ -13,13 +13,37 @@ def _build_focus_instructions(ot_data: dict) -> dict:
     already-established facts and directing effort toward gaps.
     """
     if "error" in ot_data:
+        if ot_data.get("error_type") == "not_found":
+            # OpenTargets' index genuinely has no entry for this target — that's
+            # informative in itself (novel/obscure target, thin evidence base),
+            # not a data-availability gap. Route to the same skeptical posture as
+            # a confirmed low-genetic-evidence target below.
+            return {
+                "biology_focus": (
+                    "OpenTargets has no entry for this target at all — it is novel or very "
+                    "obscure. Be thorough and skeptical: (1) what is the disease mechanism "
+                    "rationale from first principles? (2) any preclinical models where target "
+                    "modulation has therapeutic effect? (3) any genetic or expression evidence "
+                    "from other sources? (4) Flag clearly that the evidence base could not be "
+                    "benchmarked against OpenTargets — do not overstate confidence."
+                ),
+                "clinical_focus": (
+                    "OpenTargets has no entry for this target — search broadly for any clinical "
+                    "programs, including early/preclinical-stage or academic efforts, since no "
+                    "baseline clinical precedent could be established."
+                ),
+            }
+        # Upstream failure (timeout, connection error, non-2xx) — this says nothing about
+        # the target itself, so fall back to fully generic instructions rather than the
+        # skeptical "novel target" framing above.
         return {
             "biology_focus": (
-                "OpenTargets data unavailable. Cover all areas: target biology, "
+                "OpenTargets was unreachable (not a target-specific result) — its absence "
+                "here is not evidence about the target. Cover all areas: target biology, "
                 "genetic evidence, disease mechanism, and druggability."
             ),
             "clinical_focus": (
-                "OpenTargets data unavailable. Search broadly for any clinical "
+                "OpenTargets was unreachable. Search broadly for any clinical "
                 "programs targeting this pathway."
             ),
         }
@@ -43,7 +67,7 @@ def _build_focus_instructions(ot_data: dict) -> dict:
         bio_focus = (
             f"OpenTargets confirms {len(approved)} approved drug(s) for this target — "
             "target validation is established. Do NOT spend time re-proving the basic rationale. "
-            "Focus on: (1) mechanism of action and how a biologic engages the target, "
+            "Focus on: (1) mechanism of action and how the approved therapeutic(s) engage the target, "
             "(2) resistance mechanisms or treatment failures in approved therapies, "
             "(3) on-target safety signals and toxicity patterns, "
             "(4) patient stratification and predictive biomarkers."
@@ -63,7 +87,8 @@ def _build_focus_instructions(ot_data: dict) -> dict:
             "Focus on: (1) functional validation in disease-relevant models, "
             "(2) the translational gap between genetic findings and drugable biology, "
             "(3) target expression profile and cell-type specificity, "
-            "(4) structural druggability for a large molecule format."
+            "(4) structural druggability across therapeutic modalities (small molecule, large "
+            "molecule, or other)."
         )
     else:
         bio_focus = (
@@ -78,9 +103,9 @@ def _build_focus_instructions(ot_data: dict) -> dict:
     if approved:
         clin_focus = (
             f"{len(approved)} approved drug(s) exist — the market is established. Focus on: "
-            "(1) competitive crowding and what differentiation a new biologic would need, "
+            "(1) competitive crowding and what differentiation a new entrant would need, "
             "(2) underserved indications or combination opportunities, "
-            "(3) biosimilar or next-generation program landscape, "
+            "(3) biosimilar/generic or next-generation program landscape, "
             "(4) any recent approvals or label expansions that change the picture."
         )
     elif late_stage:
@@ -118,9 +143,14 @@ def prefetch_node(state: TargetAssessmentState) -> dict:
     ot_data = get_opentargets_data(target)
 
     if "error" in ot_data:
-        log.error(f"[{target}] OpenTargets failed: {ot_data['error']}")
-        errors.append(f"OpenTargets: {ot_data['error']}")
-        summary = "OpenTargets data unavailable."
+        error_type = ot_data.get("error_type", "unknown")
+        log.error(f"[{target}] OpenTargets failed ({error_type}): {ot_data['error']}")
+        errors.append(f"OpenTargets ({error_type}): {ot_data['error']}")
+        summary = (
+            "OpenTargets has no entry for this target."
+            if error_type == "not_found"
+            else "OpenTargets was unreachable (upstream failure) — not a target-specific result."
+        )
     else:
         log.info(
             f"[{target}] OpenTargets OK — "

@@ -98,6 +98,14 @@ def _normalize_stage(raw: str) -> tuple[str, float]:
     return _STAGE_TABLE["UNKNOWN"]
 
 
+def resolve_target_ensembl_id(target_symbol: str) -> str | None:
+    """Resolve a gene symbol/alias to its Ensembl ID via OpenTargets' search index."""
+    search_data = _graphql(_SEARCH_QUERY, {"q": target_symbol})
+    hits = search_data.get("search", {}).get("hits", [])
+    target_hits = [h for h in hits if h.get("entity") == "target"]
+    return target_hits[0]["id"] if target_hits else None
+
+
 def get_opentargets_data(target_symbol: str) -> dict:
     """
     Look up a target on OpenTargets Platform.
@@ -105,20 +113,23 @@ def get_opentargets_data(target_symbol: str) -> dict:
     """
     try:
         log.debug(f"OpenTargets search for: {target_symbol}")
-        search_data = _graphql(_SEARCH_QUERY, {"q": target_symbol})
-        hits = search_data.get("search", {}).get("hits", [])
-        target_hits = [h for h in hits if h.get("entity") == "target"]
+        ensembl_id = resolve_target_ensembl_id(target_symbol)
 
-        if not target_hits:
-            return {"error": f"Target '{target_symbol}' not found in OpenTargets."}
+        if not ensembl_id:
+            return {
+                "error": f"Target '{target_symbol}' not found in OpenTargets.",
+                "error_type": "not_found",
+            }
 
-        ensembl_id = target_hits[0]["id"]
         log.debug(f"OpenTargets found Ensembl ID: {ensembl_id}")
 
         target_data = _graphql(_TARGET_QUERY, {"ensemblId": ensembl_id})
         t = target_data.get("target")
         if not t:
-            return {"error": f"No profile found for Ensembl ID {ensembl_id}."}
+            return {
+                "error": f"No profile found for Ensembl ID {ensembl_id}.",
+                "error_type": "not_found",
+            }
 
         # Disease associations
         diseases = []
@@ -167,7 +178,7 @@ def get_opentargets_data(target_symbol: str) -> dict:
     except Exception as e:
         log.error(
             f"OpenTargets lookup failed for '{target_symbol}': {e}", exc_info=True)
-        return {"error": str(e)}
+        return {"error": str(e), "error_type": "upstream_failure"}
 
 
 def format_for_context(data: dict) -> str:
