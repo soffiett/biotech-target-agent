@@ -206,7 +206,12 @@ if st.session_state.get("assessment"):
     with st.expander("Competitive Landscape"):
         st.write(report.get("competitive_landscape", ""))
     with st.expander("Key Risks"):
-        for risk in report.get("key_risks", []):
+        risks = report.get("key_risks", [])
+        if isinstance(risks, str):
+            # Defensive: a malformed report can carry key_risks as a single string —
+            # iterating it directly would render one st.warning() per character.
+            risks = [risks] if risks else []
+        for risk in risks:
             st.warning(risk)
     with st.expander("Confidence Score Reasoning"):
         st.write(report.get("confidence_reasoning", ""))

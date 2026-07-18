@@ -6,10 +6,12 @@ SEARCH_MODEL = "claude-haiku-4-5"
 SYNTHESIS_MODEL = "claude-sonnet-4-6"
 
 # ── Token limits ──────────────────────────────────────────────────────────────
-# Biology's final summary now covers 8 evidence categories (5 structured sources +
-# literature/preprint/web) instead of 3 — 4096 was observed truncating that summary
-# mid-turn in testing, so this is raised to give it room.
-SEARCH_MAX_TOKENS = 6144
+# Biology's final summary covers 8 evidence categories (5 structured sources +
+# literature/preprint/web). 4096 truncated it in testing; 6144 still truncated on
+# some targets (complex/multi-gene ones produce longer write-ups) — raised again,
+# and BIOLOGY_SYSTEM_PROMPT now also caps the summary at ~700 words so token usage
+# doesn't keep creeping with every new evidence category.
+SEARCH_MAX_TOKENS = 8192
 SYNTHESIS_MAX_TOKENS = 4096
 PARSER_MAX_TOKENS = 256
 
@@ -54,7 +56,9 @@ tools can't answer:
 
 After your searches, write a structured summary covering each area, noting explicitly which
 findings come from structured evidence (genetics, variants, dependency, expression, pathway) versus
-literature, preprints, or web search. Be concise and evidence-based."""
+literature, preprints, or web search. Keep the final summary under 700 words total (roughly 80–100
+words per area) — synthesis only needs the key findings and citations, not exhaustive detail. Be
+concise and evidence-based."""
 
 CLINICAL_TRIALS_SYSTEM_PROMPT = """You are a clinical development expert and biotech analyst.
 Your task: map the clinical landscape for a drug target to assess precedent and competitive risk.

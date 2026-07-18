@@ -1,4 +1,5 @@
 import copy
+import re
 import time
 from pathlib import Path
 import anthropic
@@ -139,6 +140,22 @@ def _warn_verbose_sections(report: dict, target: str, company: str) -> None:
             )
 
 
+def _normalize_key_risks(raw: dict) -> dict:
+    """
+    Coerce key_risks into a list[str] if the model returned a single string —
+    an observed failure mode despite the tool schema requiring an array. Left
+    uncorrected, this fails AssessmentReport validation and, worse, silently
+    survives into the raw fallback report, where `for risk in key_risks`
+    iterates the string character-by-character in the UI.
+    """
+    risks = raw.get("key_risks")
+    if not isinstance(risks, str):
+        return raw
+
+    items = [i.strip() for i in re.split(r"\n?\d+\.\s+", risks) if i.strip()]
+    return {**raw, "key_risks": items or [risks]}
+
+
 def synthesis_node(state: TargetAssessmentState) -> dict:
     target = state["target"]
     company = state["company"]
@@ -206,9 +223,10 @@ Now create the structured assessment report. Follow the Report Writing Standard 
     report = {}
     for block in response.content:
         if block.type == "tool_use" and block.name == "create_assessment_report":
+            normalized_input = _normalize_key_risks(block.input)
             try:
                 validated = AssessmentReport.model_validate({
-                    **block.input,
+                    **normalized_input,
                     "target": target,
                     "company": company,
                 })
@@ -221,7 +239,12 @@ Now create the structured assessment report. Follow the Report Writing Standard 
             except ValidationError as e:
                 log.warning(
                     f"[{target}/{company}] Report validation failed: {e} — using raw output")
-                report = {**block.input, "target": target, "company": company}
+                report = {**normalized_input, "target": target, "company": company}
+                # Whatever else failed validation, key_risks must still be a list —
+                # the UI iterates it directly and a stray string renders as garbage
+                # (one st.warning() per character).
+                if not isinstance(report.get("key_risks"), list):
+                    report["key_risks"] = [str(report.get("key_risks", ""))] if report.get("key_risks") else []
             break
 
     if not report:
