@@ -1,3 +1,4 @@
+import re
 import requests
 from logger import get_logger
 
@@ -75,7 +76,11 @@ def _graphql(query: str, variables: dict) -> dict:
 
 # Tolerant lookup: OpenTargets' exact vocabulary isn't guaranteed stable and has
 # used several formats across versions ("PHASE III", "Phase III", "PHASE_III",
-# "PHASE3"). We normalize aggressively and log misses so format drift is visible.
+# "PHASE3", "PHASE_3"). We normalize aggressively and log misses so format drift
+# is visible. _STAGE_TABLE keys are roman numerals, but the live API has been
+# observed returning arabic digits ("PHASE_3") — mapped to roman below so both
+# forms resolve to the same entry instead of silently falling through to UNKNOWN.
+_ARABIC_TO_ROMAN = {"1": "I", "2": "II", "3": "III", "4": "IV"}
 
 
 def _normalize_stage(raw: str) -> tuple[str, float]:
@@ -88,8 +93,12 @@ def _normalize_stage(raw: str) -> tuple[str, float]:
     if not raw:
         return _STAGE_TABLE["UNKNOWN"]
 
-    # Normalize whitespace/case; keep "/" and roman numerals intact for exact lookup.
+    # Normalize whitespace/case, split a letter immediately followed by a digit
+    # ("PHASE3" -> "PHASE 3"), then map arabic digit tokens to roman numerals —
+    # so "PHASE3", "PHASE_3", and "PHASE III" all resolve to the same entry.
     key = " ".join(raw.upper().replace("_", " ").split())
+    key = re.sub(r"(?<=[A-Z])(?=\d)", " ", key)
+    key = " ".join(_ARABIC_TO_ROMAN.get(tok, tok) for tok in key.split())
     if key in _STAGE_TABLE:
         return _STAGE_TABLE[key]
 
