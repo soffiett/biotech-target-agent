@@ -12,7 +12,7 @@ from tools.followup import ask_followup
 from observability.tracker import start_run
 
 st.set_page_config(
-    page_title="Biotech Target Assessor",
+    page_title="TRACE",
     page_icon="🔬",
     layout="wide",
 )
@@ -31,7 +31,7 @@ _EVIDENCE_SOURCE_LABELS = {
     "company_disclosure": "web",
 }
 
-st.title("Biotech Target Assessment Agent")
+st.title("TRACE: Target Ranking via Agentic Corroboration of Evidence")
 st.caption(
     "Multi-agent system that evaluates whether a drug target is likely to yield "
     "a successful therapeutic, and which modality (small molecule, large molecule, "

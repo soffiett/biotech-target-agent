@@ -1,4 +1,4 @@
-# Biotech Target Assessment Agent
+# TRACE: Target Ranking via Agentic Corroboration of Evidence
 
 A multi-agent system that evaluates whether a biotech company's drug target is likely to yield a successful therapeutic — modality-agnostic, determining whether small molecule, large molecule (antibody/biologic), or another modality best fits the target's biology.
 
