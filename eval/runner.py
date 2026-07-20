@@ -17,6 +17,12 @@ import json
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
+
+# Must load env vars before importing graph.orchestrator — it imports node modules
+# that create an Anthropic client at import time (see app.py for the same ordering).
+from dotenv import load_dotenv
+load_dotenv()
+
 from graph.orchestrator import graph
 from graph.state import make_initial_state
 from eval.ground_truth import TEST_CASES, evaluate_report, summarize_results
