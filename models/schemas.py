@@ -99,7 +99,11 @@ class AssessmentReport(BaseModel):
     recommendation: Literal["Strong", "Moderate", "Weak", "Against"] = Field(
         description=(
             "Strong: pursue. Moderate: worth exploring with caveats. "
-            "Weak: significant concerns. Against: fundamental issues."
+            "Weak: significant concerns. Against: fundamental issues. "
+            "Derived deterministically from confidence_score (see synthesis.py "
+            "_derive_recommendation) rather than chosen independently by the model — "
+            "the two were observed to drift (e.g. confidence_score=8.0 paired with "
+            "recommendation='Moderate'). Not part of the tool schema the model fills in."
         )
     )
     recommendation_summary: str = Field(

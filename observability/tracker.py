@@ -17,7 +17,7 @@ In each node:
         tracker.record_node("biology", response, latency_s=elapsed, tool_calls=n)
 
 In app.py (run end):
-    tracker.finalize(report)
+    tracker.finalize(report, rerun_count=final_state.get("rerun_count", 0))
     tracker.save()
 """
 
@@ -146,10 +146,17 @@ class RunTracker:
 
     # ── Finalization ──────────────────────────────────────────────────────────
 
-    def finalize(self, report: dict) -> None:
+    def finalize(self, report: dict, rerun_count: int = 0) -> None:
+        """
+        rerun_count should be the final graph state's rerun_count field. biology_node
+        returns rerun_count+1 every time it runs (1 after the first pass, 2 only if
+        the judge-triggered re-run actually fired) — that's the real signal. The old
+        check ("biology" in self._nodes and tool_calls > 0) was true for virtually
+        every run, since biology always makes tool calls whether or not it re-ran.
+        """
         self._recommendation   = report.get("recommendation")
         self._confidence_score = report.get("confidence_score")
-        self._rerun_triggered  = "biology" in self._nodes and self._nodes["biology"].tool_calls > 0
+        self._rerun_triggered  = rerun_count >= 2
 
     def to_dict(self) -> dict:
         nodes_out = {name: rec.to_dict() for name, rec in self._nodes.items()}

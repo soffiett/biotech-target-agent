@@ -10,6 +10,7 @@ from models.schemas import AssessmentReport
 from config import (
     SYNTHESIS_MODEL,
     SYNTHESIS_MAX_TOKENS,
+    SYNTHESIS_TEMPERATURE,
     RAG_TOP_K,
     SYNTHESIS_SYSTEM_PROMPT,
 )
@@ -63,15 +64,32 @@ def _resolve_refs(schema: dict) -> dict:
 def _build_report_tool_schema() -> dict:
     """
     Derive the tool input_schema from AssessmentReport.
-    target and company are injected from LangGraph state, not filled by the LLM.
+    target and company are injected from LangGraph state; recommendation is
+    derived deterministically from confidence_score (see _derive_recommendation)
+    rather than left to the model — none of the three are filled by the LLM.
     """
     raw = AssessmentReport.model_json_schema()
     schema = _resolve_refs(raw)
-    for field in ("target", "company"):
+    for field in ("target", "company", "recommendation"):
         schema.get("properties", {}).pop(field, None)
         if field in schema.get("required", []):
             schema["required"].remove(field)
     return schema
+
+
+# Bands mirror confidence_score's own documented calibration (models/schemas.py)
+# and synthesis_skill.md's calibration anchors — the single authoritative mapping
+# from the numeric score to the categorical recommendation, so the two fields
+# can't drift apart the way they were observed to (e.g. confidence_score=8.0
+# paired with recommendation="Moderate" from letting the model pick both).
+def _derive_recommendation(confidence_score: float) -> str:
+    if confidence_score >= 7.5:
+        return "Strong"
+    if confidence_score >= 5.0:
+        return "Moderate"
+    if confidence_score >= 3.5:
+        return "Weak"
+    return "Against"
 
 
 # Tool schema is generated from the Pydantic model — descriptions stay in one place.
@@ -200,6 +218,7 @@ Now create the structured assessment report. Follow the Report Writing Standard 
     response = _client.messages.create(
         model=SYNTHESIS_MODEL,
         max_tokens=SYNTHESIS_MAX_TOKENS,
+        temperature=SYNTHESIS_TEMPERATURE,
         system=SYNTHESIS_SYSTEM_PROMPT,
         tools=[REPORT_TOOL],
         tool_choice={"type": "tool", "name": "create_assessment_report"},
@@ -225,10 +244,16 @@ Now create the structured assessment report. Follow the Report Writing Standard 
         if block.type == "tool_use" and block.name == "create_assessment_report":
             normalized_input = _normalize_key_risks(block.input)
             try:
+                confidence_score = float(normalized_input.get("confidence_score", 0))
+            except (TypeError, ValueError):
+                confidence_score = 0.0
+            recommendation = _derive_recommendation(confidence_score)
+            try:
                 validated = AssessmentReport.model_validate({
                     **normalized_input,
                     "target": target,
                     "company": company,
+                    "recommendation": recommendation,
                 })
                 report = validated.model_dump()
                 log.info(
@@ -239,7 +264,12 @@ Now create the structured assessment report. Follow the Report Writing Standard 
             except ValidationError as e:
                 log.warning(
                     f"[{target}/{company}] Report validation failed: {e} — using raw output")
-                report = {**normalized_input, "target": target, "company": company}
+                report = {
+                    **normalized_input,
+                    "target": target,
+                    "company": company,
+                    "recommendation": recommendation,
+                }
                 # Whatever else failed validation, key_risks must still be a list —
                 # the UI iterates it directly and a stray string renders as garbage
                 # (one st.warning() per character).

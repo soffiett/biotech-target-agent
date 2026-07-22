@@ -43,14 +43,34 @@ def check_consistency(target: str, company: str, indication: str = "") -> dict:
     # Overall consistency
     consistent = rec_consistent and conf_consistent
 
-    # Compute distance between recommendations if they differ
-    rec_distance = 0
-    if not rec_consistent and len(recommendations) >= 2:
-        idxs = [
-            RECOMMENDATION_ORDER.index(r) for r in recommendations if r in RECOMMENDATION_ORDER
-        ]
-        if len(idxs) >= 2:
-            rec_distance = max(idxs) - min(idxs)
+    # Distance between recommendations — computed whenever there are >=2 valid
+    # labels, not only when they disagree, so it's never left at a stale 0 that
+    # could be misread as "adjacent-tier disagreement" when recommendations
+    # actually matched.
+    idxs = [RECOMMENDATION_ORDER.index(r) for r in recommendations if r in RECOMMENDATION_ORDER]
+    rec_distance = (max(idxs) - min(idxs)) if len(idxs) >= 2 else 0
+
+    # divergence_type names WHICH check actually failed. reliability alone used
+    # to conflate two different failure modes into "medium": recommendations
+    # disagreeing by one tier, and recommendations agreeing but confidence_score
+    # swinging more than 2 points — the latter left rec_distance at its
+    # default 0, which read as "close disagreement" when there was no
+    # disagreement at all.
+    if consistent:
+        divergence_type = "none"
+    elif not rec_consistent and rec_distance > 1:
+        divergence_type = "recommendation_major"
+    elif not rec_consistent:
+        divergence_type = "recommendation_adjacent"
+    else:
+        divergence_type = "confidence_only"
+
+    reliability = {
+        "none": "high",
+        "confidence_only": "medium",
+        "recommendation_adjacent": "medium",
+        "recommendation_major": "low",
+    }[divergence_type]
 
     return {
         "target": target,
@@ -63,8 +83,9 @@ def check_consistency(target: str, company: str, indication: str = "") -> dict:
         "confidence_consistent": conf_consistent,
         "confidence_range": round(conf_range, 1),
         "recommendation_distance": rec_distance,
+        "divergence_type": divergence_type,
         "consistent": consistent,
-        "reliability": "high" if consistent else ("medium" if rec_distance <= 1 else "low"),
+        "reliability": reliability,
         "reports": reports,
         "trigger_llm_judge": not consistent,
     }

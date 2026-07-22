@@ -248,7 +248,7 @@ def run_single(target: str, company: str, indication: str, mode: str = "auto") -
         print("No ground truth found → running consistency check...\n")
         consistency = check_consistency(target, company, indication)
 
-        print(f"Consistency: {consistency['reliability'].upper()}")
+        print(f"Consistency: {consistency['reliability'].upper()} ({consistency['divergence_type']})")
         print(f"Recommendations: {consistency['recommendations']}")
         print(f"Confidence range: {consistency['confidence_range']} points\n")
 

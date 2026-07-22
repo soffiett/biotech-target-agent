@@ -158,7 +158,7 @@ if submitted and target and company:
         st.error("No report was generated. Check your API keys and try again.")
         st.stop()
 
-    tracker.finalize(result.get("report", {}))
+    tracker.finalize(result.get("report", {}), rerun_count=result.get("rerun_count", 0))
     tracker.save()
 
     # Persist to session state — report display and follow-up panel read from

@@ -5,6 +5,14 @@ SEARCH_MODEL = "claude-haiku-4-5"
 # Sonnet: stronger reasoning — used for the final synthesis report
 SYNTHESIS_MODEL = "claude-sonnet-4-6"
 
+# No temperature was set anywhere in the pipeline before this — every call ran at
+# the API default (1.0), the most stochastic setting available. Scoped to synthesis
+# only: this is the call that produces confidence_score, which was observed to
+# swing up to 2 points between identical repeated runs (eval/consistency_check.py
+# measures this). Low but nonzero so prose sections keep some natural phrasing
+# variation while the numeric judgment gets more stable.
+SYNTHESIS_TEMPERATURE = 0.2
+
 # ── Token limits ──────────────────────────────────────────────────────────────
 # Biology's final summary covers 8 evidence categories (5 structured sources +
 # literature/preprint/web). 4096 truncated it in testing; 6144 still truncated on
@@ -70,7 +78,9 @@ Perform 3–5 searches covering:
 4. Recent failures — have any programs targeting this mechanism failed? If so, why?
 5. Competitive landscape — who else is in the clinic for this target?
 
-Summarize findings with: trial phase, status, sponsor, indication, and what it means for the target's clinical viability."""
+Summarize findings with: trial phase, status, sponsor, indication, and what it means for the target's
+clinical viability. Keep the final summary under 500 words total (roughly 80–100 words per area) —
+synthesis only needs the key findings and citations, not exhaustive detail. Be concise."""
 
 SYNTHESIS_SYSTEM_PROMPT = """You are a senior drug discovery analyst with 20 years of experience across \
 therapeutic modalities — small molecules, biologics/antibody formats, and emerging modalities \
